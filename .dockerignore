@@ -1,0 +1,6 @@
+node_modules
+.next
+.workflow-data
+supabase/.temp
+.env*
+**/node_modules

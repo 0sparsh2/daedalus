@@ -1,0 +1,7 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "functions": {
+    "src/app/api/chat/route.ts": { "supportsCancellation": true },
+    "src/app/api/chat/[runId]/stream/route.ts": { "supportsCancellation": true }
+  }
+}
