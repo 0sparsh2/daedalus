@@ -1,36 +1,89 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Daedalus
 
-## Getting Started
+**Describe an app. Daedalus plans it with you, builds it in a live sandbox, checks its own work, and ships it.**
 
-First, run the development server:
+Daedalus is a vibe-coding platform for both non-technical and technical builders:
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- **Plan first.** The agent researches and proposes a plan (features, look and feel, build steps). You approve it with **Start building**, or switch straight to Build.
+- **Live preview.** Every project gets its own sandbox microVM running a real dev server. You watch the UI get built, hot-reloading as the agent edits files.
+- **It checks its own work.** A build only finishes when the app type-checks, builds and renders. Failures go back to the agent automatically, and you see "Automatic check found 2 problems; Daedalus is fixing them."
+- **Your keys, your models.** Bring an Anthropic, OpenAI, DeepSeek or NVIDIA NIM key at sign-up. It's validated and encrypted, and only the Daedalus gateway ever uses it. Switch models at any time; providers without a key show as locked.
+- **Sub-agents and a full trace.** The agent delegates research and codebase exploration to sub-agents with their own context. Every model call, tool call and sub-agent is traced, with timings and tokens, in the **Trace** tab.
+- **Versions, GitHub and deploys.** Every run is a restorable version (a git commit). Push to a GitHub repo, or deploy to a public URL, from the **Ship** menu.
+
+![Daedalus system architecture](docs/architecture.png)
+
+- **Architecture:** [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) covers sandboxes, the agent harness, model-agnosticism, the proxy, GitHub, deployment and scaling, and walks through what happens from a prompt to a running app.
+
+## How it's built
+
+| Piece | Technology |
+| --- | --- |
+| App, API, LLM gateway | Next.js 16 (App Router) on Vercel, React 19 |
+| Durable agent runs | Vercel Workflow + AI SDK v7 `WorkflowAgent`; every model call and tool call is a retried step |
+| Sandboxes | Vercel Sandbox (Firecracker microVMs, persistent snapshots) in production; Docker for local dev and CI |
+| Auth and data | Supabase: Auth (GitHub, Google, email), Postgres with row-level security, Realtime |
+| Models | User keys for Anthropic, OpenAI, DeepSeek, NVIDIA NIM (OpenAI-compatible), behind our gateway |
+| Generated apps | Vite 8, React 19, TypeScript, Tailwind CSS v4 starter (`sandbox-template/`) |
+
+```
+src/
+  app/                    pages and API routes (chat, gateway, projects, credentials, runs, github, deploy)
+  workflows/agent-run.ts  the durable run: start → agent loop → automatic check → finish
+  lib/agent/              harness: tools, edit engine, prompts, loop control, repair, sub-agents
+  lib/llm/                provider registry, GatewayModel, gateway, run tokens, scripted mock model
+  lib/sandbox/            SandboxProvider seam: vercel.ts, docker.ts, provisioning, dev server
+  lib/trace/              spans (the trace tree)
+  components/             home, sign-in + connect-a-model dialog, workspace (chat, preview, code, trace, plan)
+supabase/migrations/      schema with RLS
+sandbox-template/         the starter app every project begins from
+docker/                   local sandbox image
+tests/                    unit (vitest) and end-to-end (Playwright) tests
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Run it locally
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+You need Node 20.9+, pnpm 10, and Docker (for the local Supabase stack and the Docker sandbox).
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+pnpm install
+pnpm db:start                 # local Supabase in Docker; applies supabase/migrations
+pnpm sandbox:image            # builds the local sandbox image (starter app pre-installed)
+cp .env.example .env.local    # then fill in the values (see below)
+pnpm dev
+```
 
-## Learn More
+Open http://localhost:3000, describe an app and press Send. With `NEXT_PUBLIC_ENABLE_MOCK_PROVIDER=1`, the connect-a-model step also offers **Mock (tests)**, a scripted model, so you can try the whole flow without a paid key. To use real models, pick a provider and paste your key.
 
-To learn more about Next.js, take a look at the following resources:
+### Environment
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+| Variable | What it's for |
+| --- | --- |
+| `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY` | Supabase project (`supabase status` prints local values) |
+| `CREDENTIALS_ENCRYPTION_KEY` | 32 random bytes, base64 (`openssl rand -base64 32`); encrypts model keys and GitHub tokens |
+| `GATEWAY_TOKEN_SECRET` | 32+ random characters; signs run tokens for the LLM gateway |
+| `SANDBOX_PROVIDER` | `docker` locally, `vercel` in production (the default on Vercel) |
+| `NEXT_PUBLIC_AUTH_PROVIDERS` | Sign-in options to show, e.g. `github,google,email` |
+| `NEXT_PUBLIC_ENABLE_MOCK_PROVIDER`, `DAEDALUS_ENABLE_MOCK` | Show and allow the scripted mock model (dev/test only) |
+| `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | GitHub OAuth app for "Connect GitHub" (callback `/api/github/callback`) |
+| `VERCEL_DEPLOY_TOKEN`, `VERCEL_DEPLOY_TEAM_ID` | Deploying users' apps to Vercel |
+| `TAVILY_API_KEY` | Optional: better web search for the research sub-agent (falls back to DuckDuckGo) |
+| `VERCEL_TOKEN`, `VERCEL_TEAM_ID`, `VERCEL_PROJECT_ID` | Vercel Sandbox from a non-Vercel host (on Vercel, OIDC is automatic) |
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Tests
 
-## Deploy on Vercel
+```bash
+pnpm typecheck && pnpm lint
+pnpm test                                 # unit: edit engine, gateway, repair, loop control, history, parts
+node scripts/smoke-api.mjs hello          # API end to end: hello | broken | research | plan
+node scripts/smoke-stop.mjs               # stopping a run mid-way
+node tests/e2e/ui-flow.mjs                # browser: Send → sign up → connect model → plan → build → preview/code/trace
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+The end-to-end tests run the real pipeline (UI, gateway, durable workflow, Docker sandbox, Supabase) against a scripted mock model, so they need no paid keys.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Deploy
+
+1. Create a Supabase project. Apply the migrations (`supabase link` then `supabase db push`). Enable the GitHub, Google and email providers, with redirect URL `https://<your-domain>/auth/callback`.
+2. Create a Vercel project from this repo and set the environment variables above (`SANDBOX_PROVIDER=vercel`).
+3. Deploy. Vercel Workflow and Vercel Sandbox need no extra infrastructure; sandbox auth uses OIDC.

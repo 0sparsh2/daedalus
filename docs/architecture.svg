@@ -1,0 +1,244 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1680" height="1090" viewBox="0 0 1680 1090" role="img" aria-label="Daedalus system architecture diagram">
+<title>Daedalus system architecture</title>
+<defs><marker id="m-ink" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#16181D"/></marker><marker id="m-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#1D4ED8"/></marker><marker id="m-teal" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#0F766E"/></marker><marker id="m-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#9A4507"/></marker><marker id="m-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#126B33"/></marker><marker id="m-violet" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#6D28D9"/></marker><marker id="m-gray" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4B5563"/></marker></defs>
+<rect width="1680" height="1090" fill="#FBFBF9"/>
+<text x="40" y="50" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="26" font-weight="700" fill="#16181D" text-anchor="start">Daedalus · system architecture</text>
+<text x="40" y="76" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="14" font-weight="400" fill="#5D636E" text-anchor="start">Durable agent runs on Vercel Workflow · bring-your-own-key LLM gateway · one Firecracker microVM per project · Supabase for auth and data</text>
+<rect x="40" y="110" width="300" height="360" rx="16" fill="#E7EEFC" fill-opacity="0.5" stroke="#1D4ED8" stroke-width="1.6"/>
+<text x="58" y="138" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12.5" font-weight="700" fill="#1D4ED8" text-anchor="start">BROWSER</text>
+<text x="58" y="157" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">Next.js client · React 19</text>
+<rect x="60" y="172" width="260" height="132" rx="10" fill="#FFFFFF" stroke="#1D4ED8" stroke-width="1.4"/>
+<rect x="60" y="173" width="5" height="130" rx="2" fill="#1D4ED8"/>
+<text x="76" y="196" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="14.5" font-weight="650" fill="#16181D" text-anchor="start">Workspace UI</text>
+<text x="76" y="217" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">chat · plan · trace · code · versions</text>
+<text x="76" y="234" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">sign-in + connect-a-model on Send</text>
+<text x="76" y="251" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">WorkflowChatTransport: resumable</text>
+<text x="76" y="268" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">SSE, reconnects to live runs</text>
+<rect x="60" y="328" width="260" height="120" rx="10" fill="#FFFFFF" stroke="#1D4ED8" stroke-width="1.4"/>
+<rect x="60" y="329" width="5" height="118" rx="2" fill="#1D4ED8"/>
+<text x="76" y="352" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="14.5" font-weight="650" fill="#16181D" text-anchor="start">Live preview (iframe)</text>
+<text x="76" y="373" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">the user&#x27;s app, hot-reloading</text>
+<text x="76" y="390" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">bridge script → postMessage</text>
+<text x="76" y="407" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">runtime errors to the workspace</text>
+<path d="M 285 328 L 285 304" fill="none" stroke="#1D4ED8" stroke-width="1.7" stroke-dasharray="6 5" marker-end="url(#m-blue)"/>
+<rect x="40" y="525" width="300" height="495" rx="16" fill="#FBF0E2" fill-opacity="0.5" stroke="#9A4507" stroke-width="1.6" stroke-dasharray="7 5"/>
+<text x="58" y="553" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12.5" font-weight="700" fill="#9A4507" text-anchor="start">VERCEL SANDBOX</text>
+<text x="58" y="572" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">Firecracker microVM · untrusted code</text>
+<rect x="60" y="590" width="260" height="110" rx="10" fill="#FFFFFF" stroke="#9A4507" stroke-width="1.4"/>
+<rect x="60" y="591" width="5" height="108" rx="2" fill="#9A4507"/>
+<text x="76" y="614" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="14.5" font-weight="650" fill="#16181D" text-anchor="start">Vite dev server :5173</text>
+<text x="76" y="635" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">public HTTPS URL per port</text>
+<text x="76" y="652" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">restarted after npm install</text>
+<text x="76" y="669" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">supervised: logs, health probe</text>
+<rect x="60" y="720" width="260" height="110" rx="10" fill="#FFFFFF" stroke="#9A4507" stroke-width="1.4"/>
+<rect x="60" y="721" width="5" height="108" rx="2" fill="#9A4507"/>
+<text x="76" y="744" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="14.5" font-weight="650" fill="#16181D" text-anchor="start">Tool execution</text>
+<text x="76" y="765" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">bash with hard timeouts</text>
+<text x="76" y="782" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">tsc · vite build · module probe</text>
+<text x="76" y="799" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">ripgrep · npm · git</text>
+<rect x="60" y="850" width="260" height="110" rx="10" fill="#FFFFFF" stroke="#9A4507" stroke-width="1.4"/>
+<rect x="60" y="851" width="5" height="108" rx="2" fill="#9A4507"/>
+<text x="76" y="874" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="14.5" font-weight="650" fill="#16181D" text-anchor="start">Project repo (git)</text>
+<text x="76" y="895" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">a commit per run = a version</text>
+<text x="76" y="912" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">restore = a new commit</text>
+<text x="76" y="929" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">source for GitHub and deploys</text>
+<text x="60" y="985" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="600" fill="#9A4507" text-anchor="start">Snapshots on idle, resumes on use.</text>
+<text x="60" y="1003" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">No keys or tokens ever enter the VM.</text>
+<path d="M 296 448 L 296 590" fill="none" stroke="#1D4ED8" stroke-width="1.7" marker-end="url(#m-blue)"/>
+<rect x="220.75" y="481.0" width="150.5" height="34" rx="9" fill="#FFFFFF" stroke="#D3D3CC" stroke-width="0.8"/>
+<text x="296" y="494.5" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="11.5" font-weight="500" fill="#1D4ED8" text-anchor="middle">HTTPS + HMR websocket</text>
+<text x="296" y="509.5" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="11.5" font-weight="500" fill="#1D4ED8" text-anchor="middle">(direct, no proxy)</text>
+<rect x="400" y="110" width="600" height="660" rx="16" fill="#F1F1EE" fill-opacity="0.5" stroke="#16181D" stroke-width="1.6"/>
+<text x="418" y="138" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12.5" font-weight="700" fill="#16181D" text-anchor="start">VERCEL · FLUID COMPUTE</text>
+<text x="418" y="157" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">stateless functions · OIDC to Sandbox · Queues under Workflow</text>
+<rect x="420" y="172" width="270" height="150" rx="10" fill="#FFFFFF" stroke="#16181D" stroke-width="1.4"/>
+<rect x="420" y="173" width="5" height="148" rx="2" fill="#16181D"/>
+<text x="436" y="196" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="14.5" font-weight="650" fill="#16181D" text-anchor="start">Next.js app (API routes)</text>
+<text x="436" y="217" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">/api/chat: start a run, stream SSE</text>
+<text x="436" y="234" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">/api/chat/:run/stream: replay</text>
+<text x="436" y="251" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">/api/projects · files · restore</text>
+<text x="436" y="268" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">/api/credentials: check + encrypt</text>
+<text x="436" y="285" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">/api/github · /api/deploy</text>
+<rect x="710" y="172" width="270" height="150" rx="10" fill="#FFFFFF" stroke="#6D28D9" stroke-width="1.4"/>
+<rect x="710" y="173" width="5" height="148" rx="2" fill="#6D28D9"/>
+<text x="726" y="196" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="14.5" font-weight="650" fill="#16181D" text-anchor="start">LLM gateway (the proxy)</text>
+<text x="726" y="217" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">/api/gateway/{provider}/{path}</text>
+<text x="726" y="234" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">verify run token (JWT, 6 h)</text>
+<text x="726" y="251" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">stopped run → 410, not retried</text>
+<text x="726" y="268" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">decrypt user key for this call</text>
+<text x="726" y="285" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">stream through · meter · llm span</text>
+<rect x="420" y="362" width="560" height="390" rx="16" fill="#E3F2EF" fill-opacity="0.5" stroke="#0F766E" stroke-width="1.6"/>
+<text x="438" y="390" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12.5" font-weight="700" fill="#0F766E" text-anchor="start">VERCEL WORKFLOW · DURABLE RUNS</text>
+<rect x="440" y="425" width="250" height="128" rx="10" fill="#FFFFFF" stroke="#0F766E" stroke-width="1.4"/>
+<rect x="440" y="426" width="5" height="126" rx="2" fill="#0F766E"/>
+<text x="456" y="449" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="14.5" font-weight="650" fill="#16181D" text-anchor="start">agentRun (one per turn)</text>
+<text x="456" y="470" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">WorkflowAgent tool loop</text>
+<text x="456" y="487" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">plan mode or build mode</text>
+<text x="456" y="504" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">prune · loop guard · step budget</text>
+<text x="456" y="521" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">≤ 3 automatic-check rounds</text>
+<rect x="710" y="425" width="250" height="128" rx="10" fill="#FFFFFF" stroke="#0F766E" stroke-width="1.4"/>
+<rect x="710" y="426" width="5" height="126" rx="2" fill="#0F766E"/>
+<text x="726" y="449" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="14.5" font-weight="650" fill="#16181D" text-anchor="start">Durable steps</text>
+<text x="726" y="470" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">model calls via the gateway</text>
+<text x="726" y="487" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">files · edit · shell · verify</text>
+<text x="726" y="504" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">check_preview · update_todos</text>
+<text x="726" y="521" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">start · final check · finish</text>
+<rect x="440" y="584" width="250" height="106" rx="10" fill="#FFFFFF" stroke="#0F766E" stroke-width="1.4"/>
+<rect x="440" y="585" width="5" height="104" rx="2" fill="#0F766E"/>
+<text x="456" y="608" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="14.5" font-weight="650" fill="#16181D" text-anchor="start">Durable run stream</text>
+<text x="456" y="629" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">written by the loop and steps</text>
+<text x="456" y="646" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">replay from any chunk index</text>
+<text x="456" y="663" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">closed by the finish step</text>
+<rect x="710" y="584" width="250" height="106" rx="10" fill="#FFFFFF" stroke="#0F766E" stroke-width="1.4"/>
+<rect x="710" y="585" width="5" height="104" rx="2" fill="#0F766E"/>
+<text x="726" y="608" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="14.5" font-weight="650" fill="#16181D" text-anchor="start">Sub-agents</text>
+<text x="726" y="629" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">research: web search + fetch</text>
+<text x="726" y="646" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">explore: read-only code map</text>
+<text x="726" y="663" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">own context · model calls nest</text>
+<text x="440" y="714" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="500" fill="#0F766E" text-anchor="start">Every model call and tool call is a retried step · tool-call repair</text>
+<text x="440" y="732" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">Per-file write ordering · steps saved as they finish</text>
+<path d="M 680 322 L 680 425" fill="none" stroke="#0F766E" stroke-width="1.7" marker-end="url(#m-teal)"/>
+<rect x="599.25" y="332.5" width="111.5" height="19" rx="9" fill="#FFFFFF" stroke="#D3D3CC" stroke-width="0.8"/>
+<text x="655" y="346.0" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="11.5" font-weight="500" fill="#0F766E" text-anchor="middle">start(agentRun)</text>
+<path d="M 690 489 L 710 489" fill="none" stroke="#0F766E" stroke-width="1.7" marker-end="url(#m-teal)"/>
+<path d="M 440 637 L 430 637 L 430 322" fill="none" stroke="#0F766E" stroke-width="1.7" marker-end="url(#m-teal)"/>
+<rect x="407.75" y="332.5" width="124.5" height="19" rx="9" fill="#FFFFFF" stroke="#D3D3CC" stroke-width="0.8"/>
+<text x="470" y="346.0" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="11.5" font-weight="500" fill="#0F766E" text-anchor="middle">replay to browser</text>
+<path d="M 835 425 L 835 322" fill="none" stroke="#6D28D9" stroke-width="1.7" marker-end="url(#m-violet)"/>
+<rect x="756.5" y="332.5" width="157.0" height="19" rx="9" fill="#FFFFFF" stroke="#D3D3CC" stroke-width="0.8"/>
+<text x="835" y="346.0" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="11.5" font-weight="500" fill="#6D28D9" text-anchor="middle">model call + run token</text>
+<path d="M 960 612 L 970 612 L 970 322" fill="none" stroke="#6D28D9" stroke-width="1.7" stroke-dasharray="6 5" marker-end="url(#m-violet)"/>
+<path d="M 320 238 L 420 238" fill="none" stroke="#1D4ED8" stroke-width="1.7" marker-end="url(#m-blue)"/>
+<rect x="330.5" y="212.5" width="79.0" height="19" rx="9" fill="#FFFFFF" stroke="#D3D3CC" stroke-width="0.8"/>
+<text x="370" y="226.0" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="11.5" font-weight="500" fill="#1D4ED8" text-anchor="middle">SSE + REST</text>
+<path d="M 760 553 L 760 568 L 372 568 L 372 775 L 320 775" fill="none" stroke="#9A4507" stroke-width="1.7" marker-end="url(#m-amber)"/>
+<rect x="528.0" y="558.5" width="144.0" height="19" rx="9" fill="#FFFFFF" stroke="#D3D3CC" stroke-width="0.8"/>
+<text x="600" y="572.0" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="11.5" font-weight="500" fill="#9A4507" text-anchor="middle">exec · files · probe</text>
+<rect x="1090" y="110" width="260" height="380" rx="16" fill="#EFEAFE" fill-opacity="0.5" stroke="#6D28D9" stroke-width="1.6"/>
+<text x="1108" y="138" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12.5" font-weight="700" fill="#6D28D9" text-anchor="start">MODEL PROVIDERS</text>
+<text x="1108" y="157" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">the user&#x27;s own keys (BYOK)</text>
+<rect x="1108" y="172" width="224" height="62" rx="10" fill="#FFFFFF" stroke="#6D28D9" stroke-width="1.4"/>
+<rect x="1108" y="173" width="5" height="60" rx="2" fill="#6D28D9"/>
+<text x="1124" y="196" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="14.5" font-weight="650" fill="#16181D" text-anchor="start">NVIDIA NIM</text>
+<text x="1124" y="217" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">Kimi · GLM · Nemotron</text>
+<rect x="1108" y="248" width="224" height="62" rx="10" fill="#FFFFFF" stroke="#6D28D9" stroke-width="1.4"/>
+<rect x="1108" y="249" width="5" height="60" rx="2" fill="#6D28D9"/>
+<text x="1124" y="272" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="14.5" font-weight="650" fill="#16181D" text-anchor="start">Anthropic</text>
+<text x="1124" y="293" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">Claude Sonnet · Opus · Haiku</text>
+<rect x="1108" y="324" width="224" height="62" rx="10" fill="#FFFFFF" stroke="#6D28D9" stroke-width="1.4"/>
+<rect x="1108" y="325" width="5" height="60" rx="2" fill="#6D28D9"/>
+<text x="1124" y="348" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="14.5" font-weight="650" fill="#16181D" text-anchor="start">OpenAI</text>
+<text x="1124" y="369" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">GPT-6 · GPT-5 (Responses)</text>
+<rect x="1108" y="400" width="224" height="62" rx="10" fill="#FFFFFF" stroke="#6D28D9" stroke-width="1.4"/>
+<rect x="1108" y="401" width="5" height="60" rx="2" fill="#6D28D9"/>
+<text x="1124" y="424" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="14.5" font-weight="650" fill="#16181D" text-anchor="start">DeepSeek</text>
+<text x="1124" y="445" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">V4 Pro · V4 Flash</text>
+<path d="M 980 205 L 1090 205" fill="none" stroke="#6D28D9" stroke-width="1.7" marker-end="url(#m-violet)"/>
+<rect x="1008.75" y="233.0" width="72.5" height="34" rx="9" fill="#FFFFFF" stroke="#D3D3CC" stroke-width="0.8"/>
+<text x="1045" y="246.5" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="11.5" font-weight="500" fill="#6D28D9" text-anchor="middle">user key,</text>
+<text x="1045" y="261.5" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="11.5" font-weight="500" fill="#6D28D9" text-anchor="middle">per call</text>
+<rect x="1090" y="520" width="260" height="84" rx="10" fill="#FFFFFF" stroke="#4B5563" stroke-width="1.4"/>
+<rect x="1090" y="521" width="5" height="82" rx="2" fill="#4B5563"/>
+<text x="1106" y="544" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="14.5" font-weight="650" fill="#16181D" text-anchor="start">The web</text>
+<text x="1106" y="565" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">search + page fetch for research</text>
+<text x="1106" y="582" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">SSRF-guarded, on the server</text>
+<path d="M 960 660 L 1045 660 L 1045 562 L 1090 562" fill="none" stroke="#4B5563" stroke-width="1.7" marker-end="url(#m-gray)"/>
+<rect x="992.5" y="610.5" width="105.0" height="19" rx="9" fill="#FFFFFF" stroke="#D3D3CC" stroke-width="0.8"/>
+<text x="1045" y="624.0" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="11.5" font-weight="500" fill="#4B5563" text-anchor="middle">search · fetch</text>
+<rect x="1090" y="850" width="260" height="80" rx="10" fill="#FFFFFF" stroke="#4B5563" stroke-width="1.4"/>
+<rect x="1090" y="851" width="5" height="78" rx="2" fill="#4B5563"/>
+<text x="1106" y="874" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="14.5" font-weight="650" fill="#16181D" text-anchor="start">GitHub REST API</text>
+<text x="1106" y="895" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">trees · commits · refs from the server</text>
+<text x="1106" y="912" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">OAuth token never in the sandbox</text>
+<rect x="1090" y="950" width="260" height="80" rx="10" fill="#FFFFFF" stroke="#4B5563" stroke-width="1.4"/>
+<rect x="1090" y="951" width="5" height="78" rx="2" fill="#4B5563"/>
+<text x="1106" y="974" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="14.5" font-weight="650" fill="#16181D" text-anchor="start">Vercel Deployments API</text>
+<text x="1106" y="995" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">build in sandbox, upload dist/ by SHA</text>
+<text x="1106" y="1012" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">→ https://&lt;app&gt;.vercel.app</text>
+<path d="M 1000 740 L 1045 740 L 1045 890 L 1090 890" fill="none" stroke="#4B5563" stroke-width="1.7" marker-end="url(#m-gray)"/>
+<rect x="1025.0" y="805.5" width="40.0" height="19" rx="9" fill="#FFFFFF" stroke="#D3D3CC" stroke-width="0.8"/>
+<text x="1045" y="819.0" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="11.5" font-weight="500" fill="#4B5563" text-anchor="middle">push</text>
+<path d="M 1045 890 L 1045 990 L 1090 990" fill="none" stroke="#4B5563" stroke-width="1.7" marker-end="url(#m-gray)"/>
+<rect x="1018.5" y="935.5" width="53.0" height="19" rx="9" fill="#FFFFFF" stroke="#D3D3CC" stroke-width="0.8"/>
+<text x="1045" y="949.0" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="11.5" font-weight="500" fill="#4B5563" text-anchor="middle">deploy</text>
+<rect x="400" y="820" width="600" height="210" rx="16" fill="#E6F4EA" fill-opacity="0.5" stroke="#126B33" stroke-width="1.6"/>
+<text x="418" y="848" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12.5" font-weight="700" fill="#126B33" text-anchor="start">SUPABASE</text>
+<text x="418" y="867" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">Auth · Postgres with row-level security · Realtime</text>
+<rect x="420" y="885" width="175" height="120" rx="10" fill="#FFFFFF" stroke="#126B33" stroke-width="1.4"/>
+<rect x="420" y="886" width="5" height="118" rx="2" fill="#126B33"/>
+<text x="436" y="909" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="14.5" font-weight="650" fill="#16181D" text-anchor="start">Auth</text>
+<text x="436" y="930" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">GitHub · Google · email</text>
+<text x="436" y="947" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">httpOnly cookie sessions</text>
+<text x="436" y="964" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">refreshed by proxy.ts</text>
+<rect x="612" y="885" width="368" height="120" rx="10" fill="#FFFFFF" stroke="#126B33" stroke-width="1.4"/>
+<rect x="612" y="886" width="5" height="118" rx="2" fill="#126B33"/>
+<text x="628" y="909" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="14.5" font-weight="650" fill="#16181D" text-anchor="start">Postgres + RLS</text>
+<text x="628" y="930" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">projects · messages (UI message parts) · runs</text>
+<text x="628" y="947" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">spans (trace tree) · checkpoints · deployments</text>
+<text x="628" y="964" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">credentials: AES-256-GCM, no client access</text>
+<path d="M 800 752 L 800 885" fill="none" stroke="#126B33" stroke-width="1.7" marker-end="url(#m-green)"/>
+<rect x="669.5" y="785.5" width="261.0" height="19" rx="9" fill="#FFFFFF" stroke="#D3D3CC" stroke-width="0.8"/>
+<text x="800" y="799.0" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="11.5" font-weight="500" fill="#126B33" text-anchor="middle">messages · spans · checkpoints · usage</text>
+<path d="M 340 316 L 386 316 L 386 945 L 420 945" fill="none" stroke="#1D4ED8" stroke-width="1.7" stroke-dasharray="6 5" marker-end="url(#m-blue)"/>
+<rect x="356.25" y="850.5" width="59.5" height="19" rx="9" fill="#FFFFFF" stroke="#D3D3CC" stroke-width="0.8"/>
+<text x="386" y="864.0" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="11.5" font-weight="500" fill="#1D4ED8" text-anchor="middle">sign in</text>
+<rect x="1385" y="110" width="265" height="560" rx="16" fill="#FFFFFF" stroke="#D3D3CC" stroke-width="1.2"/>
+<text x="1405" y="140" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12.5" font-weight="700" fill="#16181D" text-anchor="start">PROMPT → LIVE APP</text>
+<circle cx="1413" cy="176" r="11" fill="#0F766E"/>
+<text x="1413" y="180.5" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="700" fill="#FFFFFF" text-anchor="middle">1</text>
+<text x="1433" y="180" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="13" font-weight="650" fill="#16181D" text-anchor="start">Send</text>
+<text x="1433" y="197" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">sign in, connect a model; key</text>
+<text x="1433" y="212" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">checked, then encrypted</text>
+<circle cx="1413" cy="237" r="11" fill="#0F766E"/>
+<text x="1413" y="241.5" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="700" fill="#FFFFFF" text-anchor="middle">2</text>
+<text x="1433" y="241" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="13" font-weight="650" fill="#16181D" text-anchor="start">Start</text>
+<text x="1433" y="258" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">message saved, run token</text>
+<text x="1433" y="273" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">minted, workflow started</text>
+<circle cx="1413" cy="298" r="11" fill="#0F766E"/>
+<text x="1413" y="302.5" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="700" fill="#FFFFFF" text-anchor="middle">3</text>
+<text x="1433" y="302" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="13" font-weight="650" fill="#16181D" text-anchor="start">Sandbox</text>
+<text x="1433" y="319" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">microVM up, starter app, dev</text>
+<text x="1433" y="334" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">server; preview loads</text>
+<circle cx="1413" cy="359" r="11" fill="#0F766E"/>
+<text x="1413" y="363.5" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="700" fill="#FFFFFF" text-anchor="middle">4</text>
+<text x="1433" y="363" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="13" font-weight="650" fill="#16181D" text-anchor="start">Build</text>
+<text x="1433" y="380" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">model calls via the gateway,</text>
+<text x="1433" y="395" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">tools in the sandbox</text>
+<circle cx="1413" cy="420" r="11" fill="#0F766E"/>
+<text x="1413" y="424.5" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="700" fill="#FFFFFF" text-anchor="middle">5</text>
+<text x="1433" y="424" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="13" font-weight="650" fill="#16181D" text-anchor="start">Delegate</text>
+<text x="1433" y="441" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">sub-agents research or</text>
+<text x="1433" y="456" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">explore in their own context</text>
+<circle cx="1413" cy="481" r="11" fill="#0F766E"/>
+<text x="1413" y="485.5" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="700" fill="#FFFFFF" text-anchor="middle">6</text>
+<text x="1433" y="485" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="13" font-weight="650" fill="#16181D" text-anchor="start">Check</text>
+<text x="1433" y="502" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">tsc + build + preview probe;</text>
+<text x="1433" y="517" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">failures go back</text>
+<circle cx="1413" cy="542" r="11" fill="#0F766E"/>
+<text x="1413" y="546.5" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="700" fill="#FFFFFF" text-anchor="middle">7</text>
+<text x="1433" y="546" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="13" font-weight="650" fill="#16181D" text-anchor="start">Save</text>
+<text x="1433" y="563" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">git checkpoint; message and</text>
+<text x="1433" y="578" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">trace stored</text>
+<circle cx="1413" cy="603" r="11" fill="#0F766E"/>
+<text x="1413" y="607.5" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="700" fill="#FFFFFF" text-anchor="middle">8</text>
+<text x="1433" y="607" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="13" font-weight="650" fill="#16181D" text-anchor="start">Ship</text>
+<text x="1433" y="624" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">push to GitHub; deploy to a</text>
+<text x="1433" y="639" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">public URL</text>
+<rect x="1385" y="690" width="265" height="340" rx="16" fill="#FFFFFF" stroke="#D3D3CC" stroke-width="1.2"/>
+<text x="1405" y="720" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12.5" font-weight="700" fill="#16181D" text-anchor="start">GUARANTEES</text>
+<circle cx="1409" cy="750" r="4" fill="#0F766E"/>
+<text x="1421" y="754" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="13" font-weight="650" fill="#16181D" text-anchor="start">Keys stay behind the gateway</text>
+<text x="1421" y="771" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">never in the browser or the sandbox</text>
+<circle cx="1409" cy="805" r="4" fill="#0F766E"/>
+<text x="1421" y="809" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="13" font-weight="650" fill="#16181D" text-anchor="start">Runs survive</text>
+<text x="1421" y="826" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">timeouts, redeploys and crashes</text>
+<circle cx="1409" cy="860" r="4" fill="#0F766E"/>
+<text x="1421" y="864" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="13" font-weight="650" fill="#16181D" text-anchor="start">Done means working</text>
+<text x="1421" y="881" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">it compiles, builds and renders</text>
+<circle cx="1409" cy="915" r="4" fill="#0F766E"/>
+<text x="1421" y="919" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="13" font-weight="650" fill="#16181D" text-anchor="start">Everything is traced</text>
+<text x="1421" y="936" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">model calls, tools, sub-agents</text>
+<circle cx="1409" cy="970" r="4" fill="#0F766E"/>
+<text x="1421" y="974" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="13" font-weight="650" fill="#16181D" text-anchor="start">Every run is a version</text>
+<text x="1421" y="991" font-family="'IBM Plex Sans', 'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="400" fill="#5D636E" text-anchor="start">restore any; push it to GitHub</text>
+</svg>

@@ -50,3 +50,6 @@ supabase/.branches/
 # test output
 test-results/
 playwright-report/
+
+# example env is committed
+!.env.example
