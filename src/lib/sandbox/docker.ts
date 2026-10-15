@@ -80,7 +80,7 @@ class DockerSandbox implements SandboxHandle {
     const cwd = opts.cwd ? resolveInRoot(ROOT, opts.cwd) : ROOT;
     const envArgs = Object.entries(opts.env ?? {}).flatMap(([k, v]) => ["-e", `${k}=${v}`]);
     const log = opts.logFile ?? "/tmp/daedalus-bg.log";
-    const r = await docker(["exec", "-d", "-w", cwd, ...envArgs, this.name, "bash", "-lc", `${command} >> ${shellQuote(log)} 2>&1`]);
+    const r = await docker(["exec", "-d", "-w", cwd, ...envArgs, this.name, "bash", "-lc", `( ${command} ) >> ${shellQuote(log)} 2>&1`]);
     if (r.code !== 0) throw new Error(`Couldn't start "${command}": ${r.stderr.toString()}`);
   }
 

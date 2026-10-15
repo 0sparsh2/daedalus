@@ -54,7 +54,7 @@ class VercelSandbox implements SandboxHandle {
     const log = opts.logFile ?? "/tmp/daedalus-bg.log";
     await this.sbx.runCommand({
       cmd: "bash",
-      args: ["-lc", `${command} >> ${shellQuote(log)} 2>&1`],
+      args: ["-lc", `( ${command} ) >> ${shellQuote(log)} 2>&1`],
       cwd: opts.cwd ? resolveInRoot(ROOT, opts.cwd) : ROOT,
       env: opts.env,
       detached: true,

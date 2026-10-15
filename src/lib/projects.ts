@@ -43,8 +43,17 @@ export function nameFromPrompt(prompt: string): string {
   return name ? name[0].toUpperCase() + name.slice(1) : "Untitled app";
 }
 
-export async function createProject(userId: string, name: string, description?: string): Promise<ProjectRow> {
-  const { data, error } = await supabaseAdmin().from("projects").insert({ user_id: userId, name, description: description ?? null }).select("*").single();
+export async function createProject(
+  userId: string,
+  name: string,
+  description?: string,
+  extra: { source?: Record<string, unknown>; github_repo?: string | null; template?: string } = {},
+): Promise<ProjectRow> {
+  const { data, error } = await supabaseAdmin()
+    .from("projects")
+    .insert({ user_id: userId, name, description: description ?? null, ...extra })
+    .select("*")
+    .single();
   if (error) throw new HttpError(500, error.message);
   return data as ProjectRow;
 }

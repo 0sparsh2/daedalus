@@ -69,6 +69,11 @@ export const MOCK_SCENARIOS: Record<string, MockTurn[]> = {
     { text: "Now the slow part.", toolCalls: [{ name: "run_command", args: { command: "sleep 12 && echo finished" } }] },
     { text: "This turn should never be reached when the run is stopped." },
   ],
+  explore: [
+    { text: "Looking around the imported project.", toolCalls: [{ name: "list_files", args: {} }, { name: "read_file", args: { path: "package.json" } }] },
+    { text: "Checking that it runs.", toolCalls: [{ name: "check_preview", args: {} }] },
+    { text: "This is a React todo app built with Vite. It runs in the preview; nothing was changed." },
+  ],
   "research-sub": [
     { text: "Reading package.json.", toolCalls: [{ name: "read_file", args: { path: "package.json" } }] },
     { text: "The project uses React 19.3.1 with Vite 8.\n\nSources: package.json" },

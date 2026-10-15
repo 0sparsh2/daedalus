@@ -2,6 +2,7 @@ import "server-only";
 import { env } from "@/lib/env";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { DOCKER_TEMPLATE_DIR, dockerProvider } from "./docker";
+import { importRepo, type GithubSource } from "./importer";
 import { TEMPLATE_FILES } from "./template-files";
 import { sandboxNameFor, type SandboxHandle, type SandboxProvider } from "./types";
 import { vercelProvider } from "./vercel";
@@ -16,7 +17,7 @@ export function sandboxProvider(name = env.sandboxProvider()): SandboxProvider {
   return name === "vercel" ? vercelProvider : dockerProvider;
 }
 
-export type ProvisionEvent = { stage: "sandbox" | "template" | "install" | "git" | "dev-server" | "ready"; note: string };
+export type ProvisionEvent = { stage: "sandbox" | "template" | "import" | "install" | "git" | "dev-server" | "ready"; note: string };
 
 /**
  * Brings a project's sandbox to a usable state. Every stage is idempotent, so a retry after a
@@ -35,29 +36,16 @@ export async function ensureProjectSandbox(
 
   const provisioned = await handle.exec(`test -f ${MARKER} && echo yes || echo no`, { timeoutMs: 20_000 });
   if (provisioned.stdout.trim() !== "yes") {
-    await onProgress({ stage: "template", note: "Laying down the starter app (Vite + React + Tailwind)" });
-    if (provider.name === "docker") {
-      const cp = await handle.exec(`cp -a ${DOCKER_TEMPLATE_DIR}/. ${handle.root}/`, { timeoutMs: 60_000 });
-      if (cp.exitCode !== 0) throw new Error(`Template copy failed: ${cp.stderr}`);
+    const { data: project } = await supabaseAdmin().from("projects").select("user_id,source").eq("id", projectId).single();
+    const source = (project?.source ?? { type: "template" }) as { type: string } & Partial<GithubSource>;
+    if (source.type === "github" && source.repo && project) {
+      await onProgress({ stage: "import", note: `Importing ${source.repo}` });
+      const previewHost = new URL(await handle.previewUrl(PREVIEW_PORT)).hostname;
+      await importRepo(handle, project.user_id, source as GithubSource, previewHost, (note) => Promise.resolve(onProgress({ stage: "import", note })));
+      await handle.exec(`mkdir -p .daedalus && date -u +%FT%TZ > ${MARKER}`, { timeoutMs: 15_000 });
     } else {
-      await handle.writeFiles(TEMPLATE_FILES.map((f) => ({ path: f.path, content: f.content })));
-      await onProgress({ stage: "install", note: "Installing dependencies" });
-      const install = await handle.exec("npm ci --no-audit --no-fund --loglevel=error", { timeoutMs: 240_000 });
-      if (install.exitCode !== 0) throw new Error(`npm ci failed: ${(install.stderr || install.stdout).slice(-2000)}`);
+      await provisionTemplate(handle, provider.name, onProgress);
     }
-    await onProgress({ stage: "git", note: "Initialising version history" });
-    const git = await handle.exec(
-      [
-        "git init -q -b main 2>/dev/null || git init -q",
-        'git config user.name "Daedalus"',
-        'git config user.email "agent@daedalus.dev"',
-        "git add -A",
-        'git commit -q -m "Start from the Daedalus starter app" || true',
-        `mkdir -p .daedalus && date -u +%FT%TZ > ${MARKER}`,
-      ].join(" && "),
-      { timeoutMs: 60_000 },
-    );
-    if (git.exitCode !== 0) throw new Error(`git init failed: ${git.stderr}`);
   }
 
   await ensureDevServer(handle, onProgress);
@@ -68,6 +56,32 @@ export async function ensureProjectSandbox(
     .eq("id", projectId);
   await onProgress({ stage: "ready", note: "Preview is live" });
   return { handle, previewUrl, created };
+}
+
+async function provisionTemplate(handle: SandboxHandle, provider: "vercel" | "docker", onProgress: (e: ProvisionEvent) => void | Promise<void>) {
+  await onProgress({ stage: "template", note: "Laying down the starter app (Vite + React + Tailwind)" });
+  if (provider === "docker") {
+    const cp = await handle.exec(`cp -a ${DOCKER_TEMPLATE_DIR}/. ${handle.root}/`, { timeoutMs: 60_000 });
+    if (cp.exitCode !== 0) throw new Error(`Template copy failed: ${cp.stderr}`);
+  } else {
+    await handle.writeFiles(TEMPLATE_FILES.map((f) => ({ path: f.path, content: f.content })));
+    await onProgress({ stage: "install", note: "Installing dependencies" });
+    const install = await handle.exec("npm ci --no-audit --no-fund --loglevel=error", { timeoutMs: 240_000 });
+    if (install.exitCode !== 0) throw new Error(`npm ci failed: ${(install.stderr || install.stdout).slice(-2000)}`);
+  }
+  await onProgress({ stage: "git", note: "Initialising version history" });
+  const git = await handle.exec(
+    [
+      "git init -q -b main 2>/dev/null || git init -q",
+      'git config user.name "Daedalus"',
+      'git config user.email "agent@daedalus.dev"',
+      "git add -A",
+      'git commit -q -m "Start from the Daedalus starter app" || true',
+      `mkdir -p .daedalus && date -u +%FT%TZ > ${MARKER}`,
+    ].join(" && "),
+    { timeoutMs: 60_000 },
+  );
+  if (git.exitCode !== 0) throw new Error(`git init failed: ${git.stderr}`);
 }
 
 /** Reattach to an already-provisioned project sandbox (resuming it if it was idle). */
@@ -90,9 +104,17 @@ export async function devServerLogs(handle: SandboxHandle, lines = 80): Promise<
   return r.stdout;
 }
 
+/**
+ * (Re)starts the dev server in its own process group so the whole tree (vite, esbuild, next)
+ * can be stopped together. Imported projects run `.daedalus/dev.sh`, generated on import.
+ */
 export async function restartDevServer(handle: SandboxHandle) {
-  await handle.exec(`pkill -f "vite" || true; sleep 0.5; : > ${DEV_LOG}`, { timeoutMs: 15_000 });
-  await handle.spawn("npm run dev", { logFile: DEV_LOG });
+  await handle.exec(
+    `if [ -f /tmp/daedalus-dev.pid ]; then kill -TERM -- -$(cat /tmp/daedalus-dev.pid) 2>/dev/null || true; fi; pkill -f "vite|next dev|react-scripts|astro dev|http.server 5173|serve -l 5173" 2>/dev/null || true; sleep 0.5; : > ${DEV_LOG}`,
+    { timeoutMs: 20_000 },
+  );
+  const start = "if [ -x .daedalus/dev.sh ]; then exec .daedalus/dev.sh; else exec npm run dev; fi";
+  await handle.spawn(`command -v setsid >/dev/null && exec setsid bash -c 'echo $$ > /tmp/daedalus-dev.pid; ${start}' || exec bash -c '${start}'`, { logFile: DEV_LOG });
 }
 
 export async function ensureDevServer(handle: SandboxHandle, onProgress: (e: ProvisionEvent) => void | Promise<void> = () => {}) {
@@ -105,9 +127,9 @@ export async function ensureDevServer(handle: SandboxHandle, onProgress: (e: Pro
     if (install.exitCode !== 0) throw new Error(`npm install failed: ${(install.stderr || install.stdout).slice(-2000)}`);
   }
   await restartDevServer(handle);
-  for (let i = 0; i < 40; i++) {
+  for (let i = 0; i < 90; i++) {
     await new Promise((r) => setTimeout(r, 1000));
     if (await devServerUp(handle)) return;
   }
-  throw new Error(`Dev server didn't start within 40 s. Last log lines:\n${await devServerLogs(handle, 40)}`);
+  throw new Error(`Dev server didn't start within 90 s. Last log lines:\n${await devServerLogs(handle, 40)}`);
 }
