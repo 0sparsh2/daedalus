@@ -1,7 +1,7 @@
 import "server-only";
 import { decryptSecret, encryptSecret, last4 } from "@/lib/crypto";
 import { isMockEnabled } from "@/lib/llm/mock-llm";
-import { PROVIDERS, type AnyProviderId, type ProviderId } from "@/lib/llm/providers";
+import { PROVIDERS, type AnyProviderId } from "@/lib/llm/providers";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
 export interface CredentialSummary {

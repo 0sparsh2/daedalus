@@ -268,8 +268,9 @@ export async function verify(sbx: SandboxHandle): Promise<ToolOutput & { diagnos
     if (m) diagnostics.push({ file: m[1], line: +m[2], col: +m[3], code: m[4], message: m[5] });
   }
   const typecheckOk = tc.exitCode === 0;
-  const build = await sbx.exec("npm run build --silent 2>&1 | tail -n 60", { timeoutMs: 180_000 });
-  const buildFailed = /error|failed|could not resolve/i.test(build.stdout) && !/built in/i.test(build.stdout);
+  const build = await sbx.exec("npm run build --silent > /tmp/daedalus-build.log 2>&1; echo \"EXIT:$?\"; tail -n 60 /tmp/daedalus-build.log", { timeoutMs: 180_000 });
+  const buildFailed = !/^EXIT:0$/m.test(build.stdout);
+  build.stdout = build.stdout.replace(/^EXIT:\d+\n?/m, "");
   const ok = typecheckOk && !buildFailed;
   const parts: string[] = [];
   parts.push(typecheckOk ? "Type check: passed." : `Type check: ${diagnostics.length || "some"} error(s).`);

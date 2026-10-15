@@ -61,6 +61,7 @@ export async function agentRun(input: AgentRunInput) {
     prepareStep: makePrepareStep({ contextWindow: scope.contextWindow, mode: scope.mode }),
     repairToolCall,
     maxRetries: 3,
+    maxOutputTokens: scope.maxOutputTokens,
   });
 
   try {
@@ -73,8 +74,11 @@ export async function agentRun(input: AgentRunInput) {
         stopWhen: scope.mode === "plan" ? [isStepCount(STEP_LIMIT.plan), hasToolCall("propose_plan")] : isStepCount(STEP_LIMIT.build),
         preventClose: true,
         sendFinish: false,
+        // Collect each step as it completes, so a stopped or failed round keeps its work.
+        onStepEnd: (step) => {
+          parts.push(...stepsToParts([step]));
+        },
       });
-      parts.push(...stepsToParts(result.steps));
       // The agent's instructions come back as a system message; they are re-sent via `instructions`.
       messages = result.messages.filter((m) => m.role !== "system");
       if ("error" in result && result.error) {

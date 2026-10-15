@@ -37,6 +37,16 @@ export const planSchema = z.object({
 });
 
 export function buildTools() {
+  // Tool calls in one step run concurrently. Mutations of the same file are chained here, in
+  // the workflow (deterministic on replay), so two edits to one file can't overwrite each
+  // other; reads, commands and sub-agents stay parallel.
+  const chains = new Map<string, Promise<unknown>>();
+  const serial = <T,>(path: string, run: () => Promise<T>): Promise<T> => {
+    const key = path.replace(/^\.\//, "");
+    const next = (chains.get(key) ?? Promise.resolve()).then(run, run);
+    chains.set(key, next.catch(() => undefined));
+    return next;
+  };
   return {
     list_files: tool({
       description: "List the project's files as a tree (node_modules, .git and dist are skipped).",
@@ -57,7 +67,7 @@ export function buildTools() {
       description: "Create a new file or completely replace a file's contents. Parent folders are created. Prefer edit_file for small changes to existing files.",
       inputSchema: z.object({ path, content: z.string().describe("The complete file contents") }),
       contextSchema: runScopeSchema,
-      execute: (input, o) => steps.writeFileStep(input, ctx(o as Opts)),
+      execute: (input, o) => serial(input.path, () => steps.writeFileStep(input, ctx(o as Opts))),
       toModelOutput,
     }),
     edit_file: tool({
@@ -70,14 +80,14 @@ export function buildTools() {
         replace_all: z.boolean().optional().describe("Replace every occurrence (e.g. renaming)"),
       }),
       contextSchema: runScopeSchema,
-      execute: (input, o) => steps.editFileStep(input, ctx(o as Opts)),
+      execute: (input, o) => serial(input.path, () => steps.editFileStep(input, ctx(o as Opts))),
       toModelOutput,
     }),
     delete_file: tool({
       description: "Delete a file or folder in the project.",
       inputSchema: z.object({ path }),
       contextSchema: runScopeSchema,
-      execute: (input, o) => steps.deleteFileStep(input, ctx(o as Opts)),
+      execute: (input, o) => serial(input.path, () => steps.deleteFileStep(input, ctx(o as Opts))),
       toModelOutput,
     }),
     glob: tool({

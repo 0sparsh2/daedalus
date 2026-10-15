@@ -14,6 +14,7 @@ export const runScopeSchema = z.object({
   gatewayURL: z.string(),
   mode: z.enum(["plan", "build"]),
   contextWindow: z.number(),
+  maxOutputTokens: z.number(),
 });
 
 export type RunScope = z.infer<typeof runScopeSchema>;

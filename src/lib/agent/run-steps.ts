@@ -177,7 +177,7 @@ export async function finishRunStep(scope: RunScope, input: FinishInput) {
     parentId: scope.runId,
     kind: "system",
     name: "Run finished",
-    status: finalStatus === "succeeded" ? "ok" : "error",
+    status: finalStatus === "succeeded" ? "ok" : finalStatus === "cancelled" ? "cancelled" : "error",
     endedAt: new Date(),
     attrs: { outcome: finalStatus, checkpoint: checkpoint?.sha, files: checkpoint?.files },
   });

@@ -177,6 +177,7 @@ export async function runSubagent(
     tools,
     stopWhen: isStepCount(kind === "research" ? 12 : 16),
     maxRetries: 3,
+    maxOutputTokens: 8_192,
   });
 
   try {

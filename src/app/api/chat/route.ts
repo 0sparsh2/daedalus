@@ -6,7 +6,7 @@ import { getActiveModel, listCredentials } from "@/lib/credentials";
 import { env } from "@/lib/env";
 import { HttpError, jsonError, withUser } from "@/lib/http";
 import { isMockEnabled } from "@/lib/llm/mock-llm";
-import { PROVIDERS, getModelInfo, isProviderId, subagentModelFor, type AnyProviderId } from "@/lib/llm/providers";
+import { PROVIDERS, getModelInfo, isProviderId, maxOutputFor, subagentModelFor, type AnyProviderId } from "@/lib/llm/providers";
 import { mintRunToken } from "@/lib/llm/run-token";
 import { activeRun, createProject, getProject, loadMessages, nameFromPrompt } from "@/lib/projects";
 import { supabaseAdmin } from "@/lib/supabase/admin";
@@ -95,6 +95,7 @@ export async function POST(req: Request) {
           gatewayURL: `${gatewayBase(req)}/api/gateway`,
           mode,
           contextWindow: getModelInfo(provider, model).context,
+          maxOutputTokens: maxOutputFor(provider, model),
         },
         projectName: project.name,
         history,

@@ -64,6 +64,11 @@ export const MOCK_SCENARIOS: Record<string, MockTurn[]> = {
     { text: "Let me ask a research sub-agent.", toolCalls: [{ name: "research", args: { task: "[mock:research-sub] Which React version does this project use?" } }] },
     { text: "The research sub-agent reported back. Done." },
   ],
+  slow: [
+    { text: "Writing a file, then running a long command.", toolCalls: [{ name: "write_file", args: { path: "src/notes.txt", content: "work in progress\n" } }] },
+    { text: "Now the slow part.", toolCalls: [{ name: "run_command", args: { command: "sleep 12 && echo finished" } }] },
+    { text: "This turn should never be reached when the run is stopped." },
+  ],
   "research-sub": [
     { text: "Reading package.json.", toolCalls: [{ name: "read_file", args: { path: "package.json" } }] },
     { text: "The project uses React 19.3.1 with Vite 8.\n\nSources: package.json" },

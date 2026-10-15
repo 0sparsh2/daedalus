@@ -24,9 +24,10 @@ export const gatewayHooks: GatewayHooks = {
       .maybeSingle();
     if (error) throw new GatewayError(503, "Run lookup failed", "unavailable");
     if (!data || data.user_id !== claims.userId) throw new GatewayError(403, "Unknown run", "forbidden");
-    if (data.status === "cancelled") throw new GatewayError(409, "This run was stopped.", "run_cancelled");
+    // 410, not 409: the AI SDK retries 408/409/429/5xx, and a stopped run must stop now.
+    if (data.status === "cancelled") throw new GatewayError(410, "This run was stopped.", "run_cancelled");
     if (data.status === "succeeded" || data.status === "failed") {
-      throw new GatewayError(409, "This run has already finished.", "run_finished");
+      throw new GatewayError(410, "This run has already finished.", "run_finished");
     }
   },
 

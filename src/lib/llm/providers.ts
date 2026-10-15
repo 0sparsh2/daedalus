@@ -16,6 +16,8 @@ export interface ModelInfo {
   label: string;
   /** Context window in tokens; drives compaction thresholds. */
   context: number;
+  /** Output budget per model call. Set explicitly: some providers default to ~1k, which truncates file writes. */
+  maxOutput?: number;
   /** Tool calling verified end-to-end with the Daedalus harness. */
   verified?: boolean;
   /** Fast, cheaper model used for sub-agents (research / explore) by default. */
@@ -151,6 +153,11 @@ export function getModelInfo(provider: AnyProviderId, modelId: string): ModelInf
 }
 
 /** The model sub-agents use: the provider's first `fast` model, else the main model. */
+export function maxOutputFor(provider: AnyProviderId, modelId: string): number {
+  const m = getModelInfo(provider, modelId);
+  return m.maxOutput ?? (m.fast ? 8_192 : 16_384);
+}
+
 export function subagentModelFor(provider: AnyProviderId, mainModel: string): string {
   return PROVIDERS[provider].models.find((m) => m.fast)?.id ?? mainModel;
 }
