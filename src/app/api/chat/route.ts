@@ -98,6 +98,8 @@ export async function POST(req: Request) {
           mode,
           contextWindow: getModelInfo(provider, model).context,
           maxOutputTokens: maxOutputFor(provider, model),
+          requestOptions: getModelInfo(provider, model).requestOptions,
+          subagentRequestOptions: getModelInfo(provider, pickSubagentModel(provider, model, project.settings?.subagentModel)).requestOptions,
         },
         projectName: project.name,
         history,

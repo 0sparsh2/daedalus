@@ -31,7 +31,15 @@ export const gatewayHooks: GatewayHooks = {
     }
   },
 
+  async stillActive(claims) {
+    const { data } = await supabaseAdmin().from("runs").select("status").eq("id", claims.runId).maybeSingle();
+    return data?.status === "running" || data?.status === "queued";
+  },
+
   async onFinish(claims, meta) {
+    // Calls refused after Stop never reached the model: nothing to trace or meter.
+    const forwarded = meta.firstByteAt != null;
+    if (meta.cancelled && !forwarded) return;
     const ok = meta.status != null && meta.status < 400 && !meta.error;
     if (meta.status === 401 && isProviderId(claims.provider) && claims.provider !== undefined) {
       await markCredentialInvalid(claims.userId, claims.provider, meta.error ?? "401 from provider");
@@ -44,7 +52,7 @@ export const gatewayHooks: GatewayHooks = {
         parentId: claims.spanId ?? claims.runId,
         kind: "llm",
         name: meta.model ?? "model call",
-        status: ok ? "ok" : "error",
+        status: ok ? "ok" : meta.cancelled ? "cancelled" : "error",
         startedAt: new Date(meta.startedAt),
         endedAt: new Date(meta.endedAt ?? Date.now()),
         error: ok ? undefined : meta.error ?? `HTTP ${meta.status}`,
@@ -63,7 +71,7 @@ export const gatewayHooks: GatewayHooks = {
           tools: meta.tools,
         },
       }),
-      addRunUsage(claims.runId, { input: meta.inputTokens, output: meta.outputTokens, llmCalls: 1 }),
+      addRunUsage(claims.runId, { input: meta.inputTokens, output: meta.outputTokens, llmCalls: forwarded ? 1 : 0 }),
     ]);
   },
 };

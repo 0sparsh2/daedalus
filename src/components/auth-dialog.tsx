@@ -195,6 +195,7 @@ function ConnectModel({
   const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const keyRef = useRef<HTMLInputElement>(null);
 
   function pickProvider(id: AnyProviderId) {
@@ -211,7 +212,14 @@ function ConnectModel({
     setError(null);
     try {
       if (existing && !key) await api("/api/credentials", { method: "PATCH", json: { provider, model } });
-      else await api("/api/credentials", { method: "POST", json: { provider, apiKey: key.trim(), model } });
+      else {
+        const r = await api<{ warning?: string }>("/api/credentials", { method: "POST", json: { provider, apiKey: key.trim(), model } });
+        // The key works but the chosen model is busy: say so for a moment, then continue.
+        if (r.warning) {
+          setNotice(r.warning);
+          await new Promise((res) => setTimeout(res, 2500));
+        }
+      }
       await onConnected();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Couldn't save the key. Try again.");
@@ -290,6 +298,7 @@ function ConnectModel({
         <span>We check the key with {info.label}, encrypt it (AES-256-GCM) and never send it to your browser or your app&apos;s sandbox. Only the Daedalus gateway uses it, per run.</span>
       </div>
       {error && <div className="error-text" role="alert">{error}</div>}
+      {notice && <div className="banner info" role="status"><Icon name="info" /> {notice}</div>}
       <button className="btn primary block" type="submit" disabled={busy || (!existing && key.trim().length < 10)}>
         {busy && <span className="spin" />} {existing && !key ? `Use ${info.label}` : "Check key and continue"}
       </button>

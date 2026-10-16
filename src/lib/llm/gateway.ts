@@ -28,6 +28,8 @@ export interface GatewayCallMeta {
   reasoningTokens?: number;
   cachedInputTokens?: number;
   error?: string;
+  /** The user stopped the run: the call was refused or cut off mid-stream. */
+  cancelled?: boolean;
   messages?: number;
   tools?: number;
 }
@@ -37,6 +39,8 @@ export interface GatewayHooks {
   resolveKey(claims: RunTokenClaims): Promise<string>;
   /** Throw a GatewayError to refuse the call (cancelled run, budget spent, rate limit). */
   authorize?(claims: RunTokenClaims, meta: GatewayCallMeta): Promise<void>;
+  /** Polled while a call streams; return false to cut it off (the user pressed Stop). */
+  stillActive?(claims: RunTokenClaims): Promise<boolean>;
   onFinish?(claims: RunTokenClaims, meta: GatewayCallMeta): Promise<void>;
 }
 
@@ -103,6 +107,11 @@ export async function handleGateway(
     tools: Array.isArray(parsed?.tools) ? parsed.tools.length : undefined,
   };
 
+  // One controller for the upstream call: the client going away, Stop, or the time cap all abort it.
+  const upstreamAbort = new AbortController();
+  req.signal.addEventListener("abort", () => upstreamAbort.abort("client-closed"), { once: true });
+  const maxCallMs = Number(process.env.GATEWAY_MAX_CALL_MS ?? 280_000);
+  const stopPollMs = Number(process.env.GATEWAY_STOP_POLL_MS ?? 4000);
   let upstream: Response;
   try {
     await hooks.authorize?.(claims, meta);
@@ -119,11 +128,12 @@ export async function handleGateway(
       }
       if (provider.kind === "anthropic") headers.set("x-api-key", key);
       else headers.set("authorization", `Bearer ${key}`);
-      upstream = await fetch(url, { method: req.method, headers, body: bodyText, signal: req.signal });
+      upstream = await fetch(url, { method: req.method, headers, body: bodyText, signal: upstreamAbort.signal });
     }
   } catch (err) {
     const e = err instanceof GatewayError ? err : new GatewayError(502, `Upstream request failed: ${(err as Error).message}`, "upstream_unreachable");
     meta.status = e.status;
+    meta.cancelled = e.code === "run_cancelled";
     meta.error = e.message;
     meta.endedAt = Date.now();
     await hooks.onFinish?.(claims, meta).catch(() => {});
@@ -155,26 +165,77 @@ export async function handleGateway(
     return new Response(text, { status: upstream.status, headers: outHeaders });
   }
 
-  // Streaming: pass bytes through untouched while sniffing SSE events for usage.
+  // Streaming: pass bytes through untouched while sniffing SSE events for usage. The call is
+  // bounded: Stop cuts it within seconds, and a call that runs past the time cap ends with a
+  // clear error instead of being killed silently by the platform's function timeout.
   const decoder = new TextDecoder();
+  const encoder = new TextEncoder();
   let buffer = "";
-  const meter = new TransformStream<Uint8Array, Uint8Array>({
-    transform(chunk, controller) {
-      controller.enqueue(chunk);
-      buffer += decoder.decode(chunk, { stream: true });
-      let idx: number;
-      while ((idx = buffer.indexOf("\n")) >= 0) {
-        const line = buffer.slice(0, idx).trim();
-        buffer = buffer.slice(idx + 1);
-        if (line.startsWith("data:")) readUsage(safeJson(line.slice(5).trim()), meta);
+  let stopReason: "cancelled" | "timeout" | null = null;
+  const reader = upstream.body.getReader();
+  const cap = setTimeout(() => {
+    stopReason = "timeout";
+    upstreamAbort.abort("timeout");
+  }, maxCallMs);
+  const poll = hooks.stillActive
+    ? setInterval(() => {
+        hooks.stillActive!(claims)
+          .then((ok) => {
+            if (!ok && !stopReason) {
+              stopReason = "cancelled";
+              upstreamAbort.abort("cancelled");
+            }
+          })
+          .catch(() => {});
+      }, stopPollMs)
+    : undefined;
+  const finish = async (error?: string) => {
+    clearTimeout(cap);
+    if (poll) clearInterval(poll);
+    meta.endedAt = Date.now();
+    if (error) meta.error = error;
+    await hooks.onFinish?.(claims, meta).catch(() => {});
+  };
+  const errorEvent = (message: string, code: string) =>
+    provider.kind === "anthropic"
+      ? `event: error\ndata: ${JSON.stringify({ type: "error", error: { type: code, message } })}\n\n`
+      : `data: ${JSON.stringify({ error: { message, type: code, code } })}\n\n`;
+  const out = new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      try {
+        const { done, value } = await reader.read();
+        if (done) {
+          await finish();
+          controller.close();
+          return;
+        }
+        controller.enqueue(value);
+        buffer += decoder.decode(value, { stream: true });
+        let idx: number;
+        while ((idx = buffer.indexOf("\n")) >= 0) {
+          const line = buffer.slice(0, idx).trim();
+          buffer = buffer.slice(idx + 1);
+          if (line.startsWith("data:")) readUsage(safeJson(line.slice(5).trim()), meta);
+        }
+      } catch (err) {
+        const message =
+          stopReason === "cancelled"
+            ? "This run was stopped."
+            : stopReason === "timeout"
+              ? `The model call ran longer than ${Math.round(maxCallMs / 1000)} s and was cut off. Try a faster model.`
+              : `The model stream broke: ${(err as Error).message}`;
+        meta.cancelled = stopReason === "cancelled";
+        controller.enqueue(encoder.encode(errorEvent(message, stopReason === "cancelled" ? "run_cancelled" : stopReason === "timeout" ? "gateway_timeout" : "stream_error")));
+        await finish(message);
+        controller.close();
       }
     },
-    async flush() {
-      meta.endedAt = Date.now();
-      await hooks.onFinish?.(claims, meta).catch(() => {});
+    async cancel() {
+      upstreamAbort.abort("client-closed");
+      await finish("Client disconnected");
     },
   });
-  return new Response(upstream.body.pipeThrough(meter), { status: upstream.status, headers: outHeaders });
+  return new Response(out, { status: upstream.status, headers: outHeaders });
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

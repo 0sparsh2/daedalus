@@ -178,6 +178,7 @@ export async function runSubagent(
     stopWhen: isStepCount(kind === "research" ? 12 : 16),
     maxRetries: 3,
     maxOutputTokens: 8_192,
+    providerOptions: scope.subagentRequestOptions ? { [scope.provider]: scope.subagentRequestOptions as Record<string, never> } : undefined,
   });
 
   try {

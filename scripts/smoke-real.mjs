@@ -5,7 +5,7 @@
 import { createClient } from "@supabase/supabase-js";
 
 const PROMPT = process.argv[2] ?? "Build a habit tracker: add and remove habits, tick a habit off for today, show a streak count per habit, and keep everything in localStorage.";
-const MODEL = process.argv[3] ?? "moonshotai/kimi-k2.6";
+const MODEL = process.argv[3] ?? "nvidia/nemotron-3-super-120b-a12b";
 const MODE = process.argv[4] ?? "build";
 const BASE = process.argv[5] ?? "http://localhost:3100";
 const PROJECT = process.argv[6];
@@ -39,6 +39,13 @@ if (!res.ok) {
 }
 const projectId = res.headers.get("x-daedalus-project-id");
 const runId = res.headers.get("x-daedalus-run-id");
+// Optional: press Stop mid-run (STOP_AFTER_MS) to check that in-flight model calls are cut off.
+if (process.env.STOP_AFTER_MS) {
+  setTimeout(async () => {
+    const r = await fetch(`${BASE}/api/runs/${runId}/stop`, { method: "POST", headers: auth });
+    console.log(ts(), "STOP requested", r.status);
+  }, Number(process.env.STOP_AFTER_MS));
+}
 const texts = new Map();
 const inputs = new Map();
 let buf = "";
@@ -121,4 +128,4 @@ if (previewUrl) {
   const pv = await fetch(previewUrl).catch((e) => ({ status: String(e) }));
   console.log("preview", previewUrl, pv.status);
 }
-console.log(JSON.stringify({ projectId, runId, email }));
+console.log(JSON.stringify({ projectId, runId, email, previewUrl, status: r.status, llmCalls: r.llm_calls, toolCalls: r.tool_calls, inputTokens: r.input_tokens, outputTokens: r.output_tokens, seconds: Math.round((Date.now() - t0) / 1000) }));

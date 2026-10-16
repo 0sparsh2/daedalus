@@ -62,6 +62,7 @@ export async function agentRun(input: AgentRunInput) {
     repairToolCall,
     maxRetries: 3,
     maxOutputTokens: scope.maxOutputTokens,
+    providerOptions: scope.requestOptions ? { [scope.provider]: scope.requestOptions as Record<string, never> } : undefined,
   });
 
   try {

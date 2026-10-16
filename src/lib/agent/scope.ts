@@ -15,6 +15,9 @@ export const runScopeSchema = z.object({
   mode: z.enum(["plan", "build"]),
   contextWindow: z.number(),
   maxOutputTokens: z.number(),
+  /** Per-model request options (e.g. reasoning effort) for the builder and the sub-agents. */
+  requestOptions: z.record(z.string(), z.unknown()).optional(),
+  subagentRequestOptions: z.record(z.string(), z.unknown()).optional(),
 });
 
 export type RunScope = z.infer<typeof runScopeSchema>;

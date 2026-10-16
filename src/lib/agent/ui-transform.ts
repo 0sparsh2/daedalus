@@ -32,6 +32,10 @@ export function createUITransform({
         return;
       }
       const ui = toUIMessageChunk(part as ModelCallStreamPart);
+      // A model-stream error ends the round, and the run always closes with a `data-run-end`
+      // note that says why (stopped, timed out, failed). Forwarding the raw error chunk would
+      // make the client abandon the stream before that note and the saved version arrive.
+      if (ui?.type === "error") return;
       if (ui) enqueue(controller, ui);
     },
   });

@@ -18,6 +18,8 @@ export interface ModelInfo {
   context: number;
   /** Output budget per model call. Set explicitly: some providers default to ~1k, which truncates file writes. */
   maxOutput?: number;
+  /** Extra request-body fields for this model (e.g. reasoning effort), sent as provider options. */
+  requestOptions?: Record<string, unknown>;
   /** Tool calling verified end-to-end with the Daedalus harness. */
   verified?: boolean;
   /** Fast, cheaper model used for sub-agents (research / explore) by default. */
@@ -52,12 +54,12 @@ export const PROVIDERS: Record<AnyProviderId, ProviderInfo> = {
     keyPlaceholder: "nvapi-…",
     keyPattern: /^nvapi-[A-Za-z0-9_\-]{20,}$/,
     keyUrl: "https://build.nvidia.com/settings/api-keys",
-    defaultModel: "z-ai/glm-5.3",
+    defaultModel: "nvidia/nemotron-3-super-120b-a12b",
     // Order matters: the first `fast` model runs the sub-agents. Verified = tool calling checked
     // end to end (scripts/probe-nim.mjs). Free-tier availability varies by account and hour.
     models: [
-      { id: "z-ai/glm-5.3", label: "GLM-5.3", context: 200_000, reasoning: true, verified: true },
       { id: "nvidia/nemotron-3-super-120b-a12b", label: "Nemotron 3 Super", context: 128_000, reasoning: true, verified: true },
+      { id: "z-ai/glm-5.3", label: "GLM-5.3", context: 200_000, reasoning: true, verified: true, note: "Strong coder; slow on the free tier", requestOptions: { reasoningEffort: "low" } },
       { id: "openai/gpt-oss-20b", label: "gpt-oss-20b", context: 128_000, fast: true, reasoning: true, verified: true, maxOutput: 8_192 },
       { id: "moonshotai/kimi-k2.6", label: "Kimi K2.6", context: 256_000 },
       { id: "nvidia/nemotron-3-ultra-550b-a55b", label: "Nemotron 3 Ultra", context: 128_000, reasoning: true },
