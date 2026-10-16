@@ -63,22 +63,24 @@ export async function POST(req: Request) {
     const project = parsed.data.projectId ? await getProject(user.id, parsed.data.projectId) : await createProject(user.id, nameFromPrompt(text), text.slice(0, 500));
 
     const running = await activeRun(project.id);
-    if (running) {
-      const ageMin = (Date.now() - new Date(running.started_at).getTime()) / 60_000;
-      if (ageMin < 45) return jsonError(409, "A run is already in progress for this project.", "run_in_progress", { runId: running.id, workflowRunId: running.workflow_run_id });
-      await supabaseAdmin().from("runs").update({ status: "failed", error: "Timed out", ended_at: new Date().toISOString() }).eq("id", running.id);
-    }
+    if (running) return jsonError(409, "A run is already in progress for this project.", "run_in_progress", { runId: running.id, workflowRunId: running.workflow_run_id });
 
     const db = supabaseAdmin();
-    const { error: msgErr } = await db.from("messages").upsert({ id: message.id, project_id: project.id, user_id: user.id, role: "user", parts: message.parts, metadata: { mode } });
-    if (msgErr) throw new HttpError(500, msgErr.message);
 
     const { data: run, error: runErr } = await db
       .from("runs")
       .insert({ project_id: project.id, user_id: user.id, mode, provider, model, status: "queued" })
       .select("id")
       .single();
+    if (runErr?.code === "23505") return jsonError(409, "A run is already in progress for this project.", "run_in_progress");
     if (runErr || !run) throw new HttpError(500, runErr?.message ?? "Couldn't create the run");
+
+    // Saved after the run row exists, so a rejected duplicate Send leaves no orphan message.
+    const { error: msgErr } = await db.from("messages").upsert({ id: message.id, project_id: project.id, user_id: user.id, role: "user", parts: message.parts, metadata: { mode, runId: run.id } });
+    if (msgErr) {
+      await db.from("runs").update({ status: "failed", error: "Couldn't save the message", ended_at: new Date().toISOString() }).eq("id", run.id);
+      throw new HttpError(500, msgErr.message);
+    }
 
     const history = await loadMessages(project.id);
     const token = await mintRunToken({ userId: user.id, runId: run.id, projectId: project.id, provider, spanId: run.id, agent: mode === "plan" ? "planner" : "builder" });

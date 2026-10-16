@@ -1,5 +1,6 @@
 import "server-only";
 import type { UIMessage } from "ai";
+import { getRun } from "workflow/api";
 import { HttpError } from "@/lib/http";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
@@ -64,8 +65,14 @@ export async function loadMessages(projectId: string): Promise<UIMessage[]> {
   return (data ?? []).map((m) => ({ id: m.id, role: m.role, parts: m.parts, metadata: m.metadata ?? undefined }) as UIMessage);
 }
 
+/**
+ * The project's in-flight run, if any. A row can say "running" after its workflow has ended
+ * abnormally (a crash in local dev, a cancelled workflow); those are reconciled here so a dead
+ * run never blocks the project or makes the UI reconnect to nothing.
+ */
 export async function activeRun(projectId: string) {
-  const { data } = await supabaseAdmin()
+  const db = supabaseAdmin();
+  const { data } = await db
     .from("runs")
     .select("id,workflow_run_id,status,started_at,mode")
     .eq("project_id", projectId)
@@ -73,5 +80,21 @@ export async function activeRun(projectId: string) {
     .order("started_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-  return data;
+  if (!data) return null;
+  const ageMs = Date.now() - new Date(data.started_at).getTime();
+  let dead = false;
+  if (data.workflow_run_id) {
+    const status = await Promise.resolve(getRun(data.workflow_run_id).status).catch(() => "missing");
+    dead = ["completed", "failed", "cancelled", "missing"].includes(String(status));
+  } else {
+    dead = ageMs > 2 * 60_000; // never got a workflow
+  }
+  if (!dead && ageMs < 3 * 60 * 60_000) return data;
+  await db
+    .from("runs")
+    .update({ status: "failed", error: "The run stopped unexpectedly.", ended_at: new Date().toISOString() })
+    .eq("id", data.id)
+    .in("status", ["queued", "running"]);
+  await db.from("projects").update({ status: "ready" }).eq("id", projectId);
+  return null;
 }

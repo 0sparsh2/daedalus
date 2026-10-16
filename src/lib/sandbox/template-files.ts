@@ -2,7 +2,7 @@
 export const TEMPLATE_FILES: ReadonlyArray<{ path: string; content: string }> = [
   {
     "path": ".gitignore",
-    "content": "node_modules\ndist\n.DS_Store\n*.log\n.env*\n"
+    "content": "node_modules\ndist\n.DS_Store\n*.log\n.env*\n# Daedalus workspace files (provisioning marker, preview probe)\n.daedalus/\n"
   },
   {
     "path": "AGENTS.md",
