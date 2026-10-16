@@ -11,7 +11,7 @@ import { useSession } from "@/lib/client/session";
 import { CodePanel } from "./code-panel";
 import { Messages } from "./messages";
 import { PlanPanel } from "./plan-panel";
-import { PreviewPanel, type PreviewError } from "./preview-panel";
+import { PreviewPanel, type PreviewError, type SelectedElement } from "./preview-panel";
 import { ShipMenu } from "./ship-menu";
 import { TracePanel } from "./trace-panel";
 import { VersionsMenu, type Checkpoint } from "./versions-menu";
@@ -218,6 +218,19 @@ export function Workspace({
 
   const startBuild = useCallback(() => void send("Looks good. Build it following the plan.", "build"), [send]);
 
+  // Select-to-edit: the user points at an element in the preview; we prefill a precise reference.
+  const onSelect = useCallback((el: SelectedElement) => {
+    const label = el.text ? `“${el.text.slice(0, 60)}”` : `<${el.tag}>`;
+    setInput((v) => `${v ? `${v}\n` : ""}Change the ${el.tag} ${label} (at ${el.path}): `);
+    setMode("build");
+    setView("chat");
+    setTimeout(() => {
+      const box = document.getElementById("composer-input") as HTMLTextAreaElement | null;
+      box?.focus();
+      box?.setSelectionRange(box.value.length, box.value.length);
+    }, 0);
+  }, []);
+
   return (
     <div className="ws">
       <h1 className="sr-only">{name} · Daedalus workspace</h1>
@@ -314,7 +327,7 @@ export function Workspace({
           </div>
           <div className="tabpanel" role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
             {tab === "preview" && (
-              <PreviewPanel projectId={project.id} url={previewUrl} nonce={previewNonce} running={running} onUrl={setPreviewUrl} onError={onPreviewError} />
+              <PreviewPanel projectId={project.id} url={previewUrl} nonce={previewNonce} running={running} onUrl={setPreviewUrl} onError={onPreviewError} onSelect={onSelect} />
             )}
             {tab === "code" && <CodePanel projectId={project.id} refreshKey={refreshKey} hasSandbox={Boolean(previewUrl)} />}
             {tab === "trace" && <TracePanel projectId={project.id} runId={traceRunId} onSelectRun={setTraceRunId} live={running} />}

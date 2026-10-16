@@ -9,6 +9,13 @@ export interface PreviewError {
   stack?: string;
 }
 
+export interface SelectedElement {
+  tag: string;
+  text: string;
+  path: string;
+  classes: string;
+}
+
 /**
  * Live preview of the user's app: an iframe on the sandbox's public URL. The bridge script
  * in the app posts runtime errors and navigation here; errors are forwarded to the server
@@ -21,6 +28,7 @@ export function PreviewPanel({
   running,
   onUrl,
   onError,
+  onSelect,
 }: {
   projectId: string;
   url: string | null;
@@ -28,7 +36,9 @@ export function PreviewPanel({
   running: boolean;
   onUrl(u: string): void;
   onError(e: PreviewError): void;
+  onSelect(el: SelectedElement): void;
 }) {
+  const [selecting, setSelecting] = useState(false);
   const [path, setPath] = useState("/");
   const [device, setDevice] = useState<"desktop" | "phone">("desktop");
   const [reloads, setReloads] = useState(0);
@@ -65,8 +75,14 @@ export function PreviewPanel({
     }
     const onMessage = (e: MessageEvent) => {
       if (e.origin !== origin) return;
-      const d = e.data as { source?: string; type?: string; path?: string; kind?: string; message?: string; stack?: string };
+      const d = e.data as { source?: string; type?: string; path?: string; kind?: string; message?: string; stack?: string; tag?: string; text?: string; classes?: string };
       if (d?.source !== "daedalus-preview") return;
+      if (d.type === "selected") {
+        setSelecting(false);
+        onSelect({ tag: d.tag ?? "element", text: d.text ?? "", path: d.path ?? "", classes: d.classes ?? "" });
+        return;
+      }
+      if (d.type === "select-cancelled") setSelecting(false);
       if (d.type === "navigate" && d.path) setPath(d.path);
       if (d.type === "ready" && d.path) setPath(d.path);
       if (d.type === "error" && d.message) {
@@ -81,7 +97,17 @@ export function PreviewPanel({
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [url, projectId, onError, generation]);
+  }, [url, projectId, onError, onSelect, generation]);
+
+  const toggleSelect = () => {
+    const next = !selecting;
+    setSelecting(next);
+    try {
+      frame.current?.contentWindow?.postMessage({ source: "daedalus-host", type: "select-mode", on: next }, new URL(url ?? "").origin);
+    } catch {
+      setSelecting(false);
+    }
+  };
 
   if (!url) {
     return (
@@ -113,6 +139,14 @@ export function PreviewPanel({
       <div className="urlbar">
         <button className="iconbtn" aria-label="Reload preview" title="Reload" onClick={() => setReloads((n) => n + 1)}>
           <Icon name="reload" />
+        </button>
+        <button
+          className={`btn sm ${selecting ? "primary" : "ghost"}`}
+          aria-pressed={selecting}
+          onClick={toggleSelect}
+          title="Click an element in your app to change it"
+        >
+          <Icon name="target" size={14} /> {selecting ? "Pick an element…" : "Select"}
         </button>
         <span className="url" title={src}>
           {path}

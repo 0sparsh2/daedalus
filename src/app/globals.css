@@ -234,6 +234,7 @@ button.chip:hover:not(:disabled) { border-color: var(--muted); }
 .tool .t-body { border-top: 1px solid var(--line); padding: 8px 10px; display: grid; gap: 6px; }
 .tool .ok { color: var(--ok); }
 .tool .bad { color: var(--risk); }
+.live-write .codeblock.live { margin: 0 10px 10px; max-height: 240px; border-left: 2px solid var(--accent); }
 .codeblock { margin: 0; font-family: var(--mono); font-size: 12px; line-height: 1.5; background: var(--sunk); border-radius: var(--r-1); padding: 8px 10px; overflow: auto; white-space: pre; max-height: 320px; }
 .diff .add { color: var(--ok); }
 .diff .del { color: var(--risk); }

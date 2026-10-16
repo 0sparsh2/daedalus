@@ -70,6 +70,13 @@ const frame = page.frameLocator('iframe[title="App preview"]');
 await frame.getByText("Hello from Daedalus").waitFor({ timeout: 60_000 });
 log("preview shows the built app");
 
+// 6b. Select-to-edit: point at an element in the preview → the composer gets a precise reference.
+await page.getByRole("button", { name: "Select" }).click();
+await frame.getByText("Hello from Daedalus").click();
+await page.waitForFunction(() => (document.getElementById("composer-input")?.value ?? "").includes("Hello from Daedalus"), null, { timeout: 10_000 });
+log("select-to-edit:", (await page.locator("#composer-input").inputValue()).slice(0, 90));
+await page.locator("#composer-input").fill("");
+
 // 7. Code tab lists files and shows App.tsx.
 await page.getByRole("tab", { name: "Code" }).click();
 await page.getByRole("navigation", { name: "Project files" }).getByRole("button", { name: "App.tsx" }).waitFor({ timeout: 30_000 });

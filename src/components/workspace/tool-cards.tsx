@@ -46,8 +46,30 @@ function short(path: unknown) {
 }
 
 /** One line per tool call, expandable to the details (diff, command output, check report). */
+/** While the model is still writing a file, show the code arriving (the last lines, live). */
+function LiveWrite({ part }: { part: ToolPart }) {
+  const i = part.input ?? {};
+  const path = typeof i.path === "string" ? i.path : "…";
+  const text = typeof i.content === "string" ? i.content : typeof i.new_string === "string" ? i.new_string : "";
+  const lines = text.split("\n");
+  return (
+    <div className="tool live-write" aria-live="off">
+      <div className="tool-h">
+        <span className="spin" aria-label="Writing" />
+        <Icon name="pencil" size={14} className="faint" />
+        <span className="t-title">
+          {part.type === "tool-edit_file" ? "Editing" : "Writing"} <span className="mono">{path}</span>
+        </span>
+        <span className="t-meta mono">{lines.length} lines</span>
+      </div>
+      {text && <pre className="codeblock live">{lines.slice(-14).join("\n")}</pre>}
+    </div>
+  );
+}
+
 export function ToolCard({ part }: { part: ToolPart }) {
   const name = part.type.slice(5);
+  if ((name === "write_file" || name === "edit_file") && (part.state === "input-streaming" || part.state === "input-available")) return <LiveWrite part={part} />;
   const i = part.input ?? {};
   const o = part.output ?? {};
   let icon: IconName = "bolt";
