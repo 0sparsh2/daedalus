@@ -19,6 +19,7 @@ export interface ProjectRow {
   github_last_sha: string | null;
   deploy_url: string | null;
   last_run_id: string | null;
+  settings: { subagentModel?: string } | null;
   created_at: string;
   updated_at: string;
 }

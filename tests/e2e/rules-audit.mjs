@@ -63,6 +63,7 @@ const SCREENS = [
   ["ws-trace", async (p) => { await p.goto(`${BASE}/p/${projectId}`); await panel(p); await p.getByRole("tab", { name: "Trace" }).click(); await p.getByRole("listbox", { name: "Spans" }).getByText("Automatic check #1").waitFor(); await p.getByRole("listbox", { name: "Spans" }).getByText("mock-builder").first().click(); }, true],
   ["ws-code", async (p) => { await p.goto(`${BASE}/p/${projectId}`); await panel(p); await p.getByRole("tab", { name: "Code" }).click(); await p.getByRole("navigation", { name: "Project files" }).waitFor(); }, true],
   ["ws-plan", async (p) => { await p.goto(`${BASE}/p/${projectId}`); await panel(p); await p.getByRole("tab", { name: "Plan" }).click(); await p.waitForTimeout(300); }, true],
+  ["ws-agents", async (p) => { await p.goto(`${BASE}/p/${projectId}`); await panel(p); await p.getByRole("tab", { name: "Agents" }).click(); await p.getByText("Who works on this project").waitFor(); await p.locator("#agents-md").waitFor(); }, true],
   ["ws-versions", async (p) => { await p.goto(`${BASE}/p/${projectId}`); await p.getByRole("button", { name: /Versions/ }).click(); await p.waitForTimeout(200); }, true],
   ["ws-ship", async (p) => { await p.goto(`${BASE}/p/${projectId}`); await p.getByRole("button", { name: /Ship/ }).click(); await p.waitForTimeout(600); }, true],
   ["ws-model", async (p) => { await p.goto(`${BASE}/p/${projectId}`); await p.locator(".composer .chip").first().click(); await p.waitForTimeout(200); }, true],

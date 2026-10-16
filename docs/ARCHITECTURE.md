@@ -297,6 +297,16 @@ Every run is traceable (`src/lib/trace/spans.ts`):
 - **Sub-agents nest.** A sub-agent gets its own run token whose `spanId` is the sub-agent span. Its model calls land under it in the tree, and its tool calls record child spans too.
 - The **Trace** tab renders the tree as a timeline, refreshing while the run is live. Clicking a span shows its inputs, outputs, timing and token counts. Run totals (duration, model calls, tool calls, tokens) sit on top.
 
+### The Agents tab
+
+The workspace's **Agents** tab shows the team working on the project:
+
+- the builder, with its model, runs, model and tool calls, and tokens;
+- the research and explore sub-agents, with how often each was called, failures and average duration, all from the trace data;
+- the sub-agent model, configurable per project;
+- the project's `AGENTS.md`, editable in place and committed to the project's git history;
+- the guard rails the harness always applies.
+
 ### Prompts and project memory
 
 The system prompt (`src/lib/agent/prompts.ts`) describes the environment (sandbox, the dev server already running, automatic versioning), the workflow (task list, read before you write, verify and check the preview, summarise for a non-technical user), a quality bar (responsive, accessible, realistic content, no `any`), rules against looping, and when to delegate. The project's own `AGENTS.md` is appended, the same convention Codex and Claude Code use, so users and imported repos can steer the agent.
@@ -329,8 +339,9 @@ The system prompt (`src/lib/agent/prompts.ts`) describes the environment (sandbo
 | REST | `/api/projects`, `/api/credentials`, `/api/runs/:id/spans`, `/api/projects/:id/files`, `…/file`, `…/restore`, `…/preview`, `…/github`, `…/deploy` | Everything else; all authorized with the Supabase session (cookie, or bearer token for API clients and tests) |
 | Preview | The browser loads `https://<sandbox-domain>` in an iframe; Vite's HMR websocket connects directly to the sandbox | The live app, hot-reloading as the agent edits |
 | Preview → workspace | A bridge script in the app (injected by a dev-only Vite plugin) `postMessage`s runtime errors and navigation to the parent; the workspace checks the origin, shows the error with "Ask Daedalus to fix it", and forwards it to `/api/projects/:id/preview-errors`, where the agent's `check_preview` reads it | Closing the loop on errors only a real browser sees |
+| Workspace → preview | The workspace `postMessage`s `select-mode` into the iframe; the bridge outlines elements under the cursor and, on click, describes the element (tag, text, a short CSS path) back. The composer is pre-filled with "Change the button "Book now" (at main > section.hero > …): " | Select-to-edit: point at the thing you want changed |
 
-**Resumable streaming.** The run writes to a durable stream owned by the workflow. `WorkflowChatTransport` replays from the last chunk index after a dropped connection, and the workspace reconnects to an in-flight run on page load. Our UI transform (`src/lib/agent/ui-transform.ts`) keeps the `data-*` parts that the stock transform drops, and pins the assistant message id so the live message and the saved one are the same message.
+**Resumable streaming.** The run writes to a durable stream owned by the workflow. `WorkflowChatTransport` replays from the last chunk index after a dropped connection, and the workspace reconnects to an in-flight run on page load. Our UI transform (`src/lib/agent/ui-transform.ts`) keeps the `data-*` parts that the stock transform drops, and pins the assistant message id so the live message and the saved one are the same message. Tool inputs stream too: while the model is still writing a file, its card shows the code arriving, line by line.
 
 **Persistence.** The source of truth for the chat is `messages` in Postgres. User messages are written when sent; the assistant message is built from the steps in the order they ran, with the automatic-check results in place, and written by the finish step.
 

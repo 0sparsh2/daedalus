@@ -93,7 +93,7 @@ export async function POST(req: Request) {
           userId: user.id,
           provider,
           model,
-          subagentModel: subagentModelFor(provider, model),
+          subagentModel: pickSubagentModel(provider, model, project.settings?.subagentModel),
           gatewayURL: `${gatewayBase(req)}/api/gateway`,
           mode,
           contextWindow: getModelInfo(provider, model).context,
@@ -112,6 +112,12 @@ export async function POST(req: Request) {
       headers: { "x-workflow-run-id": wf.runId, "x-daedalus-run-id": run.id, "x-daedalus-project-id": project.id },
     });
   });
+}
+
+/** The project's chosen sub-agent model if it belongs to the run's provider, else the provider's fast model. */
+function pickSubagentModel(provider: AnyProviderId, model: string, preferred?: string): string {
+  if (preferred && PROVIDERS[provider].models.some((m) => m.id === preferred)) return preferred;
+  return subagentModelFor(provider, model);
 }
 
 /**

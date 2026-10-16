@@ -8,6 +8,7 @@ import { Brand, Icon } from "@/components/icons";
 import { UserMenu } from "@/components/user-menu";
 import { ApiError, api, toApiError } from "@/lib/client/api";
 import { useSession } from "@/lib/client/session";
+import { AgentsPanel } from "./agents-panel";
 import { CodePanel } from "./code-panel";
 import { Messages } from "./messages";
 import { PlanPanel } from "./plan-panel";
@@ -25,7 +26,7 @@ export interface WorkspaceProject {
   deployUrl: string | null;
 }
 
-type Tab = "preview" | "code" | "trace" | "plan";
+type Tab = "preview" | "code" | "trace" | "plan" | "agents";
 
 /**
  * Per-project chat runtime that lives outside React: the transport's callbacks read the
@@ -318,6 +319,7 @@ export function Workspace({
                 ["code", "code", "Code"],
                 ["trace", "flow", "Trace"],
                 ["plan", "list", "Plan"],
+                ["agents", "agents", "Agents"],
               ] as const
             ).map(([id, icon, label]) => (
               <button key={id} role="tab" className="tab" aria-selected={tab === id} aria-controls={`panel-${id}`} id={`tab-${id}`} onClick={() => setTab(id)}>
@@ -332,6 +334,7 @@ export function Workspace({
             {tab === "code" && <CodePanel projectId={project.id} refreshKey={refreshKey} hasSandbox={Boolean(previewUrl)} />}
             {tab === "trace" && <TracePanel projectId={project.id} runId={traceRunId} onSelectRun={setTraceRunId} live={running} />}
             {tab === "plan" && <PlanPanel messages={messages} onStartBuild={startBuild} running={running} />}
+            {tab === "agents" && <AgentsPanel projectId={project.id} refreshKey={refreshKey} hasSandbox={Boolean(previewUrl)} />}
           </div>
         </section>
       </div>

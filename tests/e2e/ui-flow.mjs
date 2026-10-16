@@ -90,6 +90,18 @@ await page.getByRole("listbox", { name: "Spans" }).getByText("mock-builder").fir
 await page.screenshot({ path: `${OUT}/07-trace.png` });
 log("trace tab ok");
 
+// 8b. Agents tab: the team, models, and editable project instructions (AGENTS.md).
+await page.getByRole("tab", { name: "Agents" }).click();
+await page.getByText("Who works on this project").waitFor({ timeout: 30_000 });
+await page.getByText("Research sub-agent").waitFor();
+const md = page.locator("#agents-md");
+await md.waitFor({ timeout: 30_000 });
+await md.fill(`${await md.inputValue()}\n- Use a warm, friendly tone in all copy.\n`);
+await page.getByRole("button", { name: "Save instructions" }).click();
+await page.getByText("Saved. The next run uses them.").waitFor({ timeout: 30_000 });
+await page.screenshot({ path: `${OUT}/07b-agents.png` });
+log("agents tab ok (instructions saved)");
+
 // 9. Reload: conversation persists.
 await page.reload();
 await page.getByText("Build the first screen").waitFor({ timeout: 30_000 });
