@@ -81,7 +81,9 @@ export class GatewayModel implements LanguageModelV4 {
 
 function buildClient({ provider, modelId, gatewayURL, token }: GatewayModelInit): LanguageModelV4 {
   const baseURL = `${gatewayURL.replace(/\/$/, "")}/${provider}`;
-  const headers = { "x-daedalus-client": "harness" };
+  const headers: Record<string, string> = { "x-daedalus-client": "harness" };
+  // Protected preview deployments: let the agent's server-to-server gateway calls through.
+  if (process.env.VERCEL_AUTOMATION_BYPASS_SECRET) headers["x-vercel-protection-bypass"] = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
   switch (PROVIDERS[provider].kind) {
     case "anthropic":
       return createAnthropic({ baseURL, apiKey: token, headers })(modelId);

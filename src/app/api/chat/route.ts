@@ -114,10 +114,15 @@ export async function POST(req: Request) {
   });
 }
 
-/** The URL the agent's model client uses to reach this deployment's gateway. */
+/**
+ * The URL the agent's model client uses to reach this deployment's gateway: the origin the
+ * user came through (the production domain is public). Not VERCEL_URL: unique deployment URLs
+ * sit behind Vercel's deployment protection, so server-to-server calls to them get a 401.
+ */
 function gatewayBase(req: Request): string {
   if (process.env.DAEDALUS_GATEWAY_BASE_URL) return process.env.DAEDALUS_GATEWAY_BASE_URL.replace(/\/$/, "");
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
-  const origin = new URL(req.url).origin;
-  return origin || env.appUrl();
+  const fwdHost = req.headers.get("x-forwarded-host");
+  const proto = req.headers.get("x-forwarded-proto") ?? "https";
+  if (fwdHost) return `${proto}://${fwdHost}`;
+  return new URL(req.url).origin || env.appUrl();
 }
