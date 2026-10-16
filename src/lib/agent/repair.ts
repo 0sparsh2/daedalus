@@ -1,8 +1,10 @@
 /**
  * Tool-call repair for models that drift from the schema (common with open models): tool
  * names borrowed from other harnesses (bash, str_replace, TodoWrite…), camelCase keys,
- * markdown-fenced or trailing-comma JSON. A repaired call is executed normally; anything we
- * can't fix goes back to the model as an error so it can retry.
+ * markdown-fenced or trailing-comma JSON, misspelt keys, JSON-encoded arrays and objects,
+ * and stray extra fields. Fixes are checked against the tool's own JSON schema. A repaired
+ * call is executed normally; anything we can't fix goes back to the model as an error so it
+ * can retry.
  */
 
 const TOOL_ALIASES: Record<string, string> = {
@@ -107,6 +109,102 @@ export function normalizeKeys(toolName: string, input: Record<string, unknown>):
   return out;
 }
 
+interface JsonSchema {
+  type?: string | string[];
+  properties?: Record<string, JsonSchema>;
+  items?: JsonSchema;
+  required?: string[];
+  additionalProperties?: boolean | JsonSchema;
+}
+
+/** The tool's input JSON schema, from an AI SDK schema object or a plain JSON schema. */
+export function schemaOf(tool: unknown): JsonSchema | undefined {
+  const s = (tool as { inputSchema?: unknown } | undefined)?.inputSchema;
+  if (!s || typeof s !== "object") return undefined;
+  const js = (s as { jsonSchema?: unknown }).jsonSchema ?? s;
+  return js && typeof js === "object" && "properties" in js ? (js as JsonSchema) : undefined;
+}
+
+const typesOf = (s: JsonSchema | undefined): string[] => (s?.type === undefined ? [] : Array.isArray(s.type) ? s.type : [s.type]);
+const squash = (k: string) => k.toLowerCase().replace(/[_-]/g, "");
+
+/** "tos" ~ "todos", "filepath" ~ "path"-style near misses: same letters in order, most of them. */
+function similar(given: string, known: string): boolean {
+  const a = squash(given);
+  const b = squash(known);
+  if (a === b) return true;
+  const [short, long] = a.length <= b.length ? [a, b] : [b, a];
+  if (short.length < 2 || short.length / long.length < 0.5) return false;
+  if (long.startsWith(short) || long.endsWith(short)) return true;
+  let i = 0;
+  for (const ch of long) if (ch === short[i]) i++;
+  return i === short.length;
+}
+
+/** Decodes a JSON-encoded value when the schema wants an array, object, number or boolean. */
+function coerce(v: unknown, s: JsonSchema | undefined): { ok: boolean; value: unknown } {
+  const want = typesOf(s);
+  const fits = (x: unknown) =>
+    !want.length ||
+    want.some((t) => (t === "array" ? Array.isArray(x) : t === "object" ? !!x && typeof x === "object" && !Array.isArray(x) : t === "integer" ? Number.isInteger(x) : typeof x === t));
+  if (fits(v)) return { ok: true, value: v };
+  if (typeof v !== "string") return { ok: false, value: v };
+  const t = v.trim();
+  try {
+    if ((want.includes("array") && t.startsWith("[")) || (want.includes("object") && t.startsWith("{"))) {
+      const parsed = JSON.parse(t);
+      if (fits(parsed)) return { ok: true, value: parsed };
+    }
+  } catch {
+    // not JSON after all
+  }
+  if ((want.includes("number") || want.includes("integer")) && t !== "" && Number.isFinite(Number(t)) && fits(Number(t))) return { ok: true, value: Number(t) };
+  if (want.includes("boolean") && (t === "true" || t === "false")) return { ok: true, value: t === "true" };
+  return { ok: false, value: v };
+}
+
+/**
+ * Fits a call's input to the tool's schema: renames an unknown key to the one missing key
+ * it resembles (or to the only missing required key, when its value has the right type),
+ * decodes JSON-encoded values, and drops leftover keys the schema forbids.
+ */
+export function fitToSchema(input: Record<string, unknown>, schema: JsonSchema | undefined): Record<string, unknown> {
+  const props = schema?.properties;
+  if (!props) return input;
+  const out: Record<string, unknown> = { ...input };
+  const missing = () => Object.keys(props).filter((k) => !(k in out));
+  const unknown = () => Object.keys(out).filter((k) => !(k in props));
+  for (const k of unknown()) {
+    const candidates = missing().filter((m) => similar(k, m));
+    if (candidates.length === 1) {
+      out[candidates[0]] = out[k];
+      delete out[k];
+    }
+  }
+  const leftover = unknown();
+  const missingRequired = missing().filter((k) => schema.required?.includes(k));
+  if (leftover.length === 1 && missingRequired.length === 1) {
+    const c = coerce(out[leftover[0]], props[missingRequired[0]]);
+    if (c.ok) {
+      out[missingRequired[0]] = c.value;
+      delete out[leftover[0]];
+    }
+  }
+  for (const k of Object.keys(out)) {
+    if (k in props) out[k] = fitNested(coerce(out[k], props[k]).value, props[k]);
+    else if (schema.additionalProperties === false) delete out[k];
+  }
+  return out;
+}
+
+/** Applies fitToSchema inside objects and arrays of objects (e.g. each todo item). */
+function fitNested(v: unknown, s: JsonSchema | undefined): unknown {
+  const isObj = (x: unknown): x is Record<string, unknown> => !!x && typeof x === "object" && !Array.isArray(x);
+  if (Array.isArray(v) && s?.items?.properties) return v.map((item) => (isObj(item) ? fitToSchema(item, s.items) : item));
+  if (isObj(v) && s?.properties) return fitToSchema(v, s);
+  return v;
+}
+
 interface RepairArgs {
   toolCall: { toolCallId: string; toolName: string; input: string; [k: string]: unknown };
   tools: Record<string, unknown>;
@@ -125,7 +223,7 @@ export async function repairToolCall({ toolCall, tools, error }: RepairArgs) {
   }
   const parsed = parseLooseJson(toolCall.input);
   if (!parsed) return null;
-  const input = normalizeKeys(toolName, parsed);
+  const input = fitToSchema(normalizeKeys(toolName, parsed), schemaOf(tools[toolName]));
   const repaired = JSON.stringify(input);
   if (toolName === toolCall.toolName && repaired === toolCall.input) return null;
   return { type: "tool-call" as const, toolCallId: toolCall.toolCallId, toolName, input: repaired };

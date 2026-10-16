@@ -84,6 +84,8 @@ export function Workspace({
   const [name, setName] = useState(project.name);
   const [previewUrl, setPreviewUrl] = useState(project.previewUrl);
   const [previewNonce, setPreviewNonce] = useState(0);
+  // Set when the agent's preview check asks for a fresh load of the open preview.
+  const [checkId, setCheckId] = useState<string | undefined>();
   const [tab, setTab] = useState<Tab>("preview");
   const [view, setView] = useState<"chat" | "panel">("chat");
   const [mode, setMode] = useState<RunMode>(initialMode ?? (initialMessages.length === 0 ? "plan" : "build"));
@@ -135,6 +137,10 @@ export function Workspace({
       }
       if (part.type === "data-checkpoint") {
         setPreviewNonce((n) => n + 1);
+      }
+      if (part.type === "data-preview-reload") {
+        const id = (part.data as { checkId?: string })?.checkId;
+        if (id) setCheckId(id);
       }
     },
     onError: (err) => {
@@ -328,9 +334,19 @@ export function Workspace({
             ))}
           </div>
           <div className="tabpanel" role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
-            {tab === "preview" && (
-              <PreviewPanel projectId={project.id} url={previewUrl} nonce={previewNonce} running={running} onUrl={setPreviewUrl} onError={onPreviewError} onSelect={onSelect} />
-            )}
+            {/* Kept mounted on every tab: the app keeps its state, and the agent's checks can reload it. */}
+            <div style={{ display: tab === "preview" ? "contents" : "none" }}>
+              <PreviewPanel
+                projectId={project.id}
+                url={previewUrl}
+                nonce={previewNonce}
+                checkId={checkId}
+                running={running}
+                onUrl={setPreviewUrl}
+                onError={onPreviewError}
+                onSelect={onSelect}
+              />
+            </div>
             {tab === "code" && <CodePanel projectId={project.id} refreshKey={refreshKey} hasSandbox={Boolean(previewUrl)} />}
             {tab === "trace" && <TracePanel projectId={project.id} runId={traceRunId} onSelectRun={setTraceRunId} live={running} />}
             {tab === "plan" && <PlanPanel messages={messages} onStartBuild={startBuild} running={running} />}

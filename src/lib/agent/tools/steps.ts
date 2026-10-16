@@ -1,6 +1,7 @@
 import "server-only";
+import { requestPreviewReload } from "../emit";
 import { runSubagent } from "../subagents";
-import { runTool, ToolError } from "../runtime";
+import { runTool, stableId, ToolError } from "../runtime";
 import type { RunScope, ToolOutput } from "../scope";
 import * as impl from "./impl";
 
@@ -66,7 +67,11 @@ export async function devServerStep(input: { action: "status" | "restart" | "log
 
 export async function checkPreviewStep(input: Record<string, never>, ctx: Ctx) {
   "use step";
-  return runTool("check_preview", input, ctx, (s) => impl.checkPreview(s, { projectId: ctx.scope.projectId }), { kind: "verify" });
+  // Unique per call: some models reuse tool-call ids, and the id matches the browser's markers.
+  const checkId = `${stableId(ctx.scope.runId, "check_preview", ctx.toolCallId)}-${Date.now()}`;
+  return runTool("check_preview", input, ctx, (s) => impl.checkPreview(s, { projectId: ctx.scope.projectId, fresh: { checkId, requestReload: () => requestPreviewReload(checkId) } }), {
+    kind: "verify",
+  });
 }
 
 export async function verifyStep(input: Record<string, never>, ctx: Ctx) {

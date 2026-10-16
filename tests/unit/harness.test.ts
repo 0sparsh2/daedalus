@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { compactHistory, ledgerFor } from "@/lib/agent/history";
+import { compactHistory, ledgerFor, versionTitle } from "@/lib/agent/history";
 import { budgetNote, detectLoop, estimateTokens, pruneToolResults } from "@/lib/agent/loop";
-import { normalizeKeys, parseLooseJson, repairToolCall } from "@/lib/agent/repair";
+import { fitToSchema, normalizeKeys, parseLooseJson, repairToolCall } from "@/lib/agent/repair";
 import { stepsToParts } from "@/lib/agent/ui-parts";
 import { pickTurn } from "@/lib/llm/mock-llm";
 import { resolveInRoot } from "@/lib/sandbox/types";
@@ -37,6 +37,37 @@ describe("tool-call repair", () => {
     const t = await repairToolCall({ toolCall: { toolCallId: "2", toolName: "TodoWrite", input: '{"todos":[]}' }, tools, error: { name: "AI_NoSuchToolError" } });
     expect(t?.toolName).toBe("update_todos");
     expect(await repairToolCall({ toolCall: { toolCallId: "3", toolName: "launch_rocket", input: "{}" }, tools, error: { name: "AI_NoSuchToolError" } })).toBeNull();
+  });
+
+  // Shapes as they arrive inside the durable step: the AI SDK schema object with its JSON schema.
+  const todoItem = { type: "object", properties: { content: { type: "string" }, status: { type: "string" } }, required: ["content", "status"] };
+  const todosSchema = { type: "object", properties: { todos: { type: "array", items: todoItem } }, required: ["todos"], additionalProperties: false };
+  const runSchema = { type: "object", properties: { command: { type: "string" }, timeout_seconds: { type: "integer" } }, required: ["command"], additionalProperties: false };
+  const readSchema = { type: "object", properties: { path: { type: "string" }, offset: { type: "integer" } }, required: ["path"], additionalProperties: false };
+
+  it("fixes a misspelt key holding a JSON-encoded array (seen from Nemotron)", async () => {
+    const todos = [{ content: "Build timer hook", status: "in_progress" }];
+    const tools = { update_todos: { inputSchema: { jsonSchema: todosSchema } } };
+    const r = await repairToolCall({
+      toolCall: { toolCallId: "4", toolName: "update_todos", input: JSON.stringify({ tos: JSON.stringify(todos) }) },
+      tools,
+      error: { name: "AI_InvalidToolInputError" },
+    });
+    expect(r && JSON.parse(r.input)).toEqual({ todos });
+  });
+
+  it("fits inputs to the schema: near-miss keys, encoded numbers, stray fields", () => {
+    expect(fitToSchema({ todo: [{ content: "a", status: "pending" }] }, todosSchema)).toEqual({ todos: [{ content: "a", status: "pending" }] });
+    expect(fitToSchema({ command: "npm test", timeout_seconds: "90", explanation: "run tests" }, runSchema)).toEqual({ command: "npm test", timeout_seconds: 90 });
+    expect(fitToSchema({ path: "src/App.tsx", offset: "20" }, readSchema)).toEqual({ path: "src/App.tsx", offset: 20 });
+    // The only missing required key takes the only unknown key, but only if the type fits.
+    expect(fitToSchema({ list: [{ content: "a", status: "pending" }] }, todosSchema)).toEqual({ todos: [{ content: "a", status: "pending" }] });
+    expect(fitToSchema({ list: 42 }, todosSchema)).toEqual({});
+    // Strings stay strings when the schema wants a string.
+    expect(fitToSchema({ command: "[1,2]" }, runSchema)).toEqual({ command: "[1,2]" });
+    expect(fitToSchema({ anything: 1 }, undefined)).toEqual({ anything: 1 });
+    // Nested items are fitted too: a todo written as {task, state}.
+    expect(fitToSchema({ todos: [{ task: "Ship it", status: "pending" }] }, todosSchema)).toEqual({ todos: [{ content: "Ship it", status: "pending" }] });
   });
 });
 
@@ -132,3 +163,16 @@ describe("mock model scripting", () => {
     expect(third.text).toMatch(/Fixing/);
   });
 });
+
+describe("version titles", () => {
+  it("turns the agent's reply into a short title", () => {
+    expect(versionTitle("I've built a habit tracker with the following features:\n- **Add habits**")).toBe("Built a habit tracker");
+    expect(versionTitle("Fixed: the page compiles and the preview works.")).toBe("Fixed: the page compiles and the preview works");
+    expect(versionTitle("Your greeting page is live in the preview, with a counter button.")).toBe("Your greeting page is live in the preview, with a counter button");
+    expect(versionTitle("## Done! I have added dark mode to the settings page.")).toBe("Added dark mode to the settings page");
+    expect(versionTitle("I’ve built a simple habit tracker that lets you:\n- **Add a habit**")).toBe("Built a simple habit tracker");
+    expect(versionTitle(undefined)).toBe("Update");
+    expect(versionTitle("x".repeat(100)).length).toBeLessThanOrEqual(72);
+  });
+});
+

@@ -20,11 +20,14 @@ export interface SelectedElement {
  * Live preview of the user's app: an iframe on the sandbox's public URL. The bridge script
  * in the app posts runtime errors and navigation here; errors are forwarded to the server
  * so the agent's check_preview can read them, and surfaced with a "fix it" action.
+ * When a check sends a `checkId`, the frame reloads and reports `load` markers (an
+ * acknowledgement, then the finished load) so the check reads errors from that load only.
  */
 export function PreviewPanel({
   projectId,
   url,
   nonce,
+  checkId,
   running,
   onUrl,
   onError,
@@ -33,6 +36,7 @@ export function PreviewPanel({
   projectId: string;
   url: string | null;
   nonce: number;
+  checkId?: string;
   running: boolean;
   onUrl(u: string): void;
   onError(e: PreviewError): void;
@@ -44,7 +48,7 @@ export function PreviewPanel({
   const [reloads, setReloads] = useState(0);
   const [waking, setWaking] = useState(false);
   const [wakeError, setWakeError] = useState<string | null>(null);
-  const generation = `${reloads}:${nonce}`;
+  const generation = `${reloads}:${nonce}:${checkId ?? ""}`;
   const [errorState, setErrorState] = useState<{ gen: string; list: PreviewError[] }>({ gen: "", list: [] });
   const errors = errorState.gen === generation ? errorState.list : [];
   const frame = useRef<HTMLIFrameElement>(null);
@@ -65,6 +69,12 @@ export function PreviewPanel({
   }, [projectId, onUrl]);
 
 
+  // Tell the check a browser is watching; the new frame (keyed by generation) is loading now.
+  useEffect(() => {
+    if (!checkId || !url) return;
+    void api(`/api/projects/${projectId}/preview-errors`, { method: "POST", json: { kind: "load", message: "ack", checkId } }).catch(() => {});
+  }, [checkId, url, projectId]);
+
   useEffect(() => {
     if (!url) return;
     let origin: string;
@@ -74,7 +84,8 @@ export function PreviewPanel({
       return;
     }
     const onMessage = (e: MessageEvent) => {
-      if (e.origin !== origin) return;
+      // Only the current frame: a replaced frame's late messages belong to an older load.
+      if (e.origin !== origin || e.source !== frame.current?.contentWindow) return;
       const d = e.data as { source?: string; type?: string; path?: string; kind?: string; message?: string; stack?: string; tag?: string; text?: string; classes?: string };
       if (d?.source !== "daedalus-preview") return;
       if (d.type === "selected") {
@@ -85,19 +96,22 @@ export function PreviewPanel({
       if (d.type === "select-cancelled") setSelecting(false);
       if (d.type === "navigate" && d.path) setPath(d.path);
       if (d.type === "ready" && d.path) setPath(d.path);
+      if (d.type === "ready" && checkId) {
+        void api(`/api/projects/${projectId}/preview-errors`, { method: "POST", json: { kind: "load", message: "loaded", url: d.path, checkId } }).catch(() => {});
+      }
       if (d.type === "error" && d.message) {
         const key = `${generation}|${d.kind}:${d.message}`;
         if (seen.current.has(key)) return;
         seen.current.add(key);
         const err = { kind: d.kind ?? "error", message: d.message, stack: d.stack };
         setErrorState((st) => ({ gen: generation, list: [...(st.gen === generation ? st.list : []), err].slice(-5) }));
-        void api(`/api/projects/${projectId}/preview-errors`, { method: "POST", json: { ...err, url: d.path } }).catch(() => {});
+        void api(`/api/projects/${projectId}/preview-errors`, { method: "POST", json: { ...err, url: d.path, checkId } }).catch(() => {});
         onError(err);
       }
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [url, projectId, onError, onSelect, generation]);
+  }, [url, projectId, onError, onSelect, generation, checkId]);
 
   const toggleSelect = () => {
     const next = !selecting;

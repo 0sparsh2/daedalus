@@ -74,6 +74,16 @@ export const MOCK_SCENARIOS: Record<string, MockTurn[]> = {
     { text: "Checking that it runs.", toolCalls: [{ name: "check_preview", args: {} }] },
     { text: "This is a React todo app built with Vite. It runs in the preview; nothing was changed." },
   ],
+  // Schema drift seen from real open models: a misspelt key holding a JSON-encoded array, and
+  // another harness's key names. The repair layer should fix both without a retry.
+  drift: [
+    {
+      text: "Planning the work.",
+      toolCalls: [{ name: "update_todos", args: { tos: JSON.stringify([{ content: "Write the page", status: "in_progress" }, { content: "Verify", status: "pending" }]) } }],
+    },
+    { text: "Writing the page.", toolCalls: [{ name: "write_file", args: { filePath: "src/App.tsx", contents: HELLO_APP } }] },
+    { text: "Both tool calls went through. Done." },
+  ],
   "research-sub": [
     { text: "Reading package.json.", toolCalls: [{ name: "read_file", args: { path: "package.json" } }] },
     { text: "The project uses React 19.3.1 with Vite 8.\n\nSources: package.json" },

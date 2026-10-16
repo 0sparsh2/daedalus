@@ -52,3 +52,21 @@ export function compactHistory(messages: UIMessage[]): UIMessage[] {
     return { ...m, parts: keep };
   });
 }
+
+/**
+ * A short version title from the agent's final reply: its first sentence, without markdown,
+ * "I've"/"I have", or a dangling "with the following features:" tail.
+ * "I've built a habit tracker with the following features:" → "Built a habit tracker".
+ */
+export function versionTitle(reply: string | undefined): string {
+  const line = ((reply ?? "").replace(/[#*`_>]/g, "").trim().split("\n")[0] ?? "").replace(/^(?:done|great|all set|perfect)[!,.]\s*/i, "");
+  const sentence = (line.match(/^.*?[.!?](?=\s|$)/)?.[0] ?? line).trim();
+  let t = sentence.replace(/[.!?:]+$/, "").trim();
+  // A list intro ("…a habit tracker that lets you:") keeps only what was built.
+  if (sentence.endsWith(":")) t = t.replace(/\s+(?:that|which|where|so|with|including|featuring)\b.*$/i, "");
+  t = t.replace(/^I(?:['’]ve| have)\s+/i, "").trim();
+  if (!t) return "Update";
+  t = t[0].toUpperCase() + t.slice(1);
+  return t.length > 72 ? `${t.slice(0, 71).replace(/\s+\S*$/, "")}…` : t;
+}
+

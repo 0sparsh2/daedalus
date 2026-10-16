@@ -206,12 +206,19 @@ for(const m of t.matchAll(re)){const u=m[1]||m[2];if(u&&!skip(u))queue.push(u);}
 console.log(JSON.stringify({checked:seen.size,errors}));`;
 
 /**
- * Checks the running app without a browser: crawls Vite's module graph from index.html
- * (compile and import errors surface as HTTP 500s), reads the dev-server log, and includes
- * runtime errors the preview bridge reported from the user's browser since the last change.
+ * Checks the running app. Without a browser it crawls Vite's module graph from index.html
+ * (compile and import errors surface as HTTP 500s) and reads the dev-server log. When the
+ * user has the preview open, it also has the workspace reload it and collects the runtime
+ * errors and React warnings from that fresh load, so fixed errors never linger and
+ * once-per-load warnings are seen again.
  */
-export async function checkPreview(sbx: SandboxHandle, input: { projectId: string; since?: string }): Promise<ToolOutput> {
+export async function checkPreview(
+  sbx: SandboxHandle,
+  input: { projectId: string; fresh?: { checkId: string; requestReload(): Promise<void> } },
+): Promise<ToolOutput> {
   await ensureDevServer(sbx);
+  const fresh = input.fresh;
+  const browser = fresh ? fresh.requestReload().then(() => waitForPreviewLoad(input.projectId, fresh.checkId)) : Promise.resolve(null);
   await sbx.writeFiles([{ path: ".daedalus/probe.mjs", content: PROBE }]);
   const r = await sbx.exec("node .daedalus/probe.mjs", { timeoutMs: 60_000 });
   let probe: { checked: number; errors: Array<{ path: string; status?: number; error: string }> } = { checked: 0, errors: [] };
@@ -225,22 +232,67 @@ export async function checkPreview(sbx: SandboxHandle, input: { projectId: strin
     .split("\n")
     .filter((l) => /error|failed|cannot find|unexpected/i.test(l) && !/hmr update/i.test(l))
     .slice(-12);
-  const since = input.since ?? new Date(Date.now() - 10 * 60_000).toISOString();
-  const { data: runtime } = await supabaseAdmin()
-    .from("preview_errors")
-    .select("kind,message,stack,created_at")
-    .eq("project_id", input.projectId)
-    .gte("created_at", since)
-    .order("created_at", { ascending: false })
-    .limit(8);
+
+  const load = await browser.catch(() => null);
+  let runtime: Array<{ kind: string; message: string; stack: string | null }> = [];
+  if (fresh && load?.loaded) {
+    // The first render (and its warnings) can land just after the load event.
+    const settle = 1500 - (Date.now() - load.seenAt);
+    if (settle > 0) await new Promise((res) => setTimeout(res, settle));
+    const { data } = await supabaseAdmin()
+      .from("preview_errors")
+      .select("kind,message,stack")
+      .eq("project_id", input.projectId)
+      .eq("check_id", fresh.checkId)
+      .neq("kind", "load")
+      .order("created_at", { ascending: true })
+      .limit(8);
+    runtime = data ?? [];
+  }
+
   const problems: string[] = [];
   for (const e of probe.errors) problems.push(`Module ${e.path}${e.status ? ` (HTTP ${e.status})` : ""}: ${cleanViteError(e.error)}`);
-  for (const e of runtime ?? []) problems.push(`Browser ${e.kind}: ${e.message}${e.stack ? `\n${String(e.stack).split("\n").slice(0, 4).join("\n")}` : ""}`);
+  for (const e of runtime) problems.push(`Browser ${e.kind}: ${e.message}${e.stack ? `\n${String(e.stack).split("\n").slice(0, 4).join("\n")}` : ""}`);
   const ok = problems.length === 0;
+  const browserNote = !fresh
+    ? ""
+    : load?.loaded
+      ? "The preview was reloaded in the user's browser; that fresh load reported no runtime errors or warnings."
+      : load
+        ? "The user's browser was asked to reload the preview but it didn't finish loading within 12 s (a very slow first render or an infinite loop?)."
+        : "No browser has the preview open right now, so runtime errors couldn't be checked; only compilation was.";
   const text = ok
-    ? `Preview is healthy: ${probe.checked} modules compiled, no runtime errors reported.${logErrors.length ? `\nDev-server log mentions:\n${logErrors.join("\n")}` : ""}`
+    ? `Preview is healthy: ${probe.checked} modules compiled. ${browserNote}${logErrors.length ? `\nDev-server log mentions:\n${logErrors.join("\n")}` : ""}`
     : `Preview has ${problems.length} problem${problems.length === 1 ? "" : "s"}:\n${problems.map((p, i) => `${i + 1}. ${p}`).join("\n\n")}`;
-  return { ok, text: truncateMiddle(text, 9000), modules: probe.checked, problems: problems.length };
+  return { ok, text: truncateMiddle(text.trim(), 9000), modules: probe.checked, problems: problems.length, browser: load?.loaded ? "fresh-load" : load ? "no-load" : "none" };
+}
+
+/**
+ * Waits for the workspace's markers for one check: an acknowledgement (a browser has the
+ * preview open and is reloading it), then the fresh page load itself. Returns null when no
+ * browser answers, so a headless run doesn't wait long.
+ */
+async function waitForPreviewLoad(projectId: string, checkId: string): Promise<{ loaded: boolean; seenAt: number } | null> {
+  const marker = async (message: "ack" | "loaded", timeoutMs: number) => {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      const { data } = await supabaseAdmin()
+        .from("preview_errors")
+        .select("id")
+        .eq("project_id", projectId)
+        .eq("check_id", checkId)
+        .eq("kind", "load")
+        .eq("message", message)
+        .limit(1)
+        .maybeSingle();
+      if (data) return true;
+      await new Promise((res) => setTimeout(res, 400));
+    }
+    return false;
+  };
+  if (!(await marker("ack", 3000))) return null;
+  const loaded = await marker("loaded", 12_000);
+  return { loaded, seenAt: Date.now() };
 }
 
 function cleanViteError(s: string): string {

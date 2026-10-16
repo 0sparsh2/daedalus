@@ -20,10 +20,22 @@
     var r = e.reason || {};
     report("unhandledrejection", r.message || String(r), r.stack);
   });
+  var str = function (a) { return a && a.stack ? a.stack : typeof a === "object" ? JSON.stringify(a) : String(a); };
+  // console.error("The tag <%s> is unrecognized…", "circle") → "The tag <circle> is unrecognized…"
+  var format = function (args) {
+    args = Array.prototype.slice.call(args);
+    var first = args[0];
+    if (typeof first === "string" && /%[sdifoOc]/.test(first)) {
+      args.shift();
+      first = first.replace(/%[sdifoOc]/g, function (m) { return args.length ? (m === "%c" ? (args.shift(), "") : str(args.shift())) : m; });
+      return [first].concat(args.map(str)).join(" ");
+    }
+    return args.map(str).join(" ");
+  };
   var origError = console.error;
   console.error = function () {
     try {
-      var msg = Array.prototype.map.call(arguments, function (a) { return a && a.stack ? a.stack : typeof a === "object" ? JSON.stringify(a) : String(a); }).join(" ");
+      var msg = format(arguments);
       if (!/Download the React DevTools|\[vite\]/.test(msg)) report("console", msg);
     } catch (e) {}
     return origError.apply(console, arguments);

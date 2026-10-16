@@ -1,9 +1,10 @@
 import "server-only";
-import type { UIMessageChunk } from "ai";
 import { getWritable } from "workflow";
 import { attachProjectSandbox, ensureProjectSandbox } from "@/lib/sandbox";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { endSpan, recordSpan, startSpan } from "@/lib/trace/spans";
+import { emit, requestPreviewReload } from "./emit";
+import { versionTitle } from "./history";
 import type { PromptContext } from "./prompts";
 import { stableId } from "./runtime";
 import type { RunScope } from "./scope";
@@ -15,15 +16,6 @@ import type { PlainPart } from "./ui-parts";
  * automatic final check (the harness's own verify gate, independent of what the model
  * claims), and finish (git checkpoint, persist the assistant message, close the run).
  */
-
-async function emit(chunk: UIMessageChunk) {
-  const writer = getWritable<UIMessageChunk>().getWriter();
-  try {
-    await writer.write(chunk);
-  } finally {
-    writer.releaseLock();
-  }
-}
 
 export async function startRunStep(scope: RunScope, projectName: string): Promise<PromptContext> {
   "use step";
@@ -90,8 +82,12 @@ export async function finalCheckStep(scope: RunScope, round: number): Promise<Fi
   const t0 = new Date();
   await emit({ type: "data-check", id: `check-${round}`, data: { round, status: "running" } });
   await startSpan({ id, runId: scope.runId, projectId: scope.projectId, userId: scope.userId, parentId: scope.runId, kind: "verify", name: `Automatic check #${round + 1}` });
-  const v = await impl.verify(sandbox);
-  const p = await impl.checkPreview(sandbox, { projectId: scope.projectId, since: t0.toISOString() });
+  // Type check + build, and the preview check (with a fresh load in the user's browser), together.
+  const checkId = `${id}-${t0.getTime()}`;
+  const [v, p] = await Promise.all([
+    impl.verify(sandbox),
+    impl.checkPreview(sandbox, { projectId: scope.projectId, fresh: { checkId, requestReload: () => requestPreviewReload(checkId) } }),
+  ]);
   const ok = v.ok && p.ok;
   const report = ok ? "" : [v.ok ? "" : v.text, p.ok ? "" : p.text].filter(Boolean).join("\n\n");
   await endSpan(id, { status: ok ? "ok" : "error", startedAt: t0, output: { verify: v.text.slice(0, 1500), preview: p.text.slice(0, 1500) } });
@@ -131,7 +127,7 @@ export async function finishRunStep(scope: RunScope, input: FinishInput) {
     try {
       const sandbox = await attachProjectSandbox(scope.projectId);
       const lastText = [...input.parts].reverse().find((p) => p.type === "text")?.text as string | undefined;
-      const title = (lastText ?? "Update").split("\n")[0].replace(/[#*`_]/g, "").trim().slice(0, 72) || "Update";
+      const title = versionTitle(lastText);
       checkpoint = await impl.commitCheckpoint(sandbox, title);
       if (checkpoint) {
         await db.from("checkpoints").insert({ project_id: scope.projectId, user_id: scope.userId, run_id: scope.runId, sha: checkpoint.sha, message: title, files_changed: checkpoint.files });
