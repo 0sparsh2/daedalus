@@ -57,12 +57,39 @@ function docker(args: string[], opts: { input?: Uint8Array | string; timeoutMs?:
   });
 }
 
+/**
+ * Local dev keeps one container per project. Like Vercel Sandbox's idle timeout, cap how many
+ * run at once: starting one more stops the least recently used (by last command, or start
+ * time after a dev-server restart). A stopped sandbox resumes when its project is opened.
+ */
+const MAX_RUNNING = Number(process.env.DOCKER_MAX_SANDBOXES ?? 8);
+const lastUsed = new Map<string, number>();
+
+async function makeRoom(keep: string) {
+  const ids = (await docker(["ps", "-q", "--filter", "label=daedalus=1"])).stdout.toString().split("\n").filter(Boolean);
+  if (ids.length < MAX_RUNNING) return;
+  const info = (await docker(["inspect", "-f", "{{.Name}} {{.State.StartedAt}}", ...ids])).stdout.toString().split("\n").filter(Boolean);
+  const running = info
+    .map((line) => {
+      const [rawName, startedAt] = line.split(" ");
+      const name = rawName.replace(/^\//, "");
+      return { name, used: lastUsed.get(name) ?? Date.parse(startedAt) };
+    })
+    .filter((c) => c.name !== keep)
+    .sort((a, b) => a.used - b.used);
+  const excess = running.slice(0, Math.max(0, running.length - (MAX_RUNNING - 1)));
+  await Promise.all(excess.map((c) => docker(["stop", "-t", "2", c.name])));
+}
+
 class DockerSandbox implements SandboxHandle {
   readonly provider = "docker" as const;
   readonly root = ROOT;
-  constructor(readonly name: string) {}
+  constructor(readonly name: string) {
+    lastUsed.set(name, Date.now());
+  }
 
   async exec(command: string, opts: ExecOptions = {}): Promise<ExecResult> {
+    lastUsed.set(this.name, Date.now());
     const started = Date.now();
     const timeoutSec = Math.ceil((opts.timeoutMs ?? 120_000) / 1000);
     const cwd = opts.cwd ? resolveInRoot(ROOT, opts.cwd) : ROOT;
@@ -132,6 +159,7 @@ export const dockerProvider: SandboxProvider = {
     const s = await state(name);
     if (s === "missing") return null;
     if (s === "stopped") {
+      await makeRoom(name);
       const r = await docker(["start", name]);
       if (r.code !== 0) throw new Error(`Couldn't resume sandbox ${name}: ${r.stderr.toString()}`);
     }
@@ -142,6 +170,7 @@ export const dockerProvider: SandboxProvider = {
     const existing = await this.get(name);
     if (existing) return { handle: existing, created: false };
     const portArgs = ports.flatMap((p) => ["-p", `127.0.0.1::${p}`]);
+    await makeRoom(name);
     const r = await docker([
       "run", "-d", "--name", name,
       "--label", "daedalus=1", "--label", `daedalus.project=${projectId}`,

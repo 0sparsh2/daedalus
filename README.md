@@ -64,6 +64,7 @@ Open http://localhost:3000, describe an app and press Send. With `NEXT_PUBLIC_EN
 | `GATEWAY_TOKEN_SECRET` | 32+ random characters; signs run tokens for the LLM gateway |
 | `GATEWAY_MAX_CALL_MS` | Optional: cap on one streamed model call (default 280000, under the gateway's 300 s function limit) |
 | `SANDBOX_PROVIDER` | `docker` locally, `vercel` in production (the default on Vercel) |
+| `DOCKER_MAX_SANDBOXES` | Optional, local only: how many project containers may run at once (default 8; the least recently used stops first) |
 | `NEXT_PUBLIC_AUTH_PROVIDERS` | Sign-in options to show, e.g. `github,google,email` |
 | `NEXT_PUBLIC_ENABLE_MOCK_PROVIDER`, `DAEDALUS_ENABLE_MOCK` | Show and allow the scripted mock model (dev/test only) |
 | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | GitHub OAuth app for "Connect GitHub" (callback `/api/github/callback`) |
