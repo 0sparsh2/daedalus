@@ -1,6 +1,6 @@
 // UI rules audit for the real app (the ui-ux-pro-max checks used on the prototype): contrast,
 // accessible names, labels, target sizes, tiny text, headings, duplicate ids, overflow.
-// Reuses inPage() from wireframes/tests/rules-audit.js. Needs the dev server + local Supabase.
+// The in-page checks live in ./ui-rules-checks.js. Needs the dev server + local Supabase.
 // Usage: node tests/e2e/rules-audit.mjs [baseUrl]
 import { chromium } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
@@ -8,8 +8,8 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const BASE = process.argv[2] ?? "http://localhost:3100";
-const auditSrc = readFileSync(fileURLToPath(new URL("../../../wireframes/tests/rules-audit.js", import.meta.url)), "utf8");
-const inPageSrc = auditSrc.slice(auditSrc.indexOf("function inPage(touch) {"), auditSrc.indexOf("\n(async () => {"));
+const checksSrc = readFileSync(fileURLToPath(new URL("./ui-rules-checks.js", import.meta.url)), "utf8");
+const inPageSrc = checksSrc.slice(checksSrc.indexOf("function inPage(touch) {"));
 
 // Seed: a user with a mock key and a project that has a plan run and a build run.
 const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SECRET_KEY, { auth: { persistSession: false } });

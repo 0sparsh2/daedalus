@@ -78,6 +78,7 @@ pnpm test                                 # unit: edit engine, gateway, repair, 
 node scripts/smoke-api.mjs hello          # API end to end: hello | broken | research | plan
 node scripts/smoke-stop.mjs               # stopping a run mid-way
 node tests/e2e/ui-flow.mjs                # browser: Send → sign up → connect model → plan → build → preview/code/trace
+node tests/e2e/rules-audit.mjs            # UI rules audit: contrast, names, labels, targets, headings (desktop/phone, light/dark)
 ```
 
 The end-to-end tests run the real pipeline (UI, gateway, durable workflow, Docker sandbox, Supabase) against a scripted mock model, so they need no paid keys.
