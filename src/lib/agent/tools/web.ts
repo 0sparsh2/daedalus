@@ -108,46 +108,109 @@ export interface SearchHit {
   snippet: string;
 }
 
-/** Tavily when a key is configured; otherwise DuckDuckGo's HTML endpoint (no key needed). */
+type Engine = (query: string, n: number) => Promise<SearchHit[]>;
+
+/** Tavily: a search API built for agents (TAVILY_API_KEY). */
+const tavily: Engine = async (query, n) => {
+  const key = process.env.TAVILY_API_KEY;
+  if (!key) return [];
+  const res = await fetch("https://api.tavily.com/search", {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
+    body: JSON.stringify({ query, max_results: n, search_depth: "basic" }),
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  });
+  if (!res.ok) return [];
+  const j = (await res.json()) as { results?: Array<{ title: string; url: string; content: string }> };
+  return (j.results ?? []).map((r) => ({ title: r.title, url: r.url, snippet: r.content.slice(0, 400) }));
+};
+
+/** Brave Search's official API (BRAVE_SEARCH_API_KEY). */
+const brave: Engine = async (query, n) => {
+  const key = process.env.BRAVE_SEARCH_API_KEY;
+  if (!key) return [];
+  const res = await fetch(`https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=${n}`, {
+    headers: { accept: "application/json", "x-subscription-token": key },
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  });
+  if (!res.ok) return [];
+  const j = (await res.json()) as { web?: { results?: Array<{ title: string; url: string; description?: string }> } };
+  return (j.web?.results ?? []).map((r) => ({ title: htmlToText(r.title), url: r.url, snippet: htmlToText(r.description ?? "").slice(0, 400) }));
+};
+
+/** DuckDuckGo's no-JavaScript page: keyless, best effort (it challenges traffic it thinks is automated). */
+const duckDuckGo: Engine = async (query, n) => {
+  const res = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`, {
+    headers: { "user-agent": "Mozilla/5.0 (compatible; DaedalusResearch/1.0)" },
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  });
+  const html = await res.text();
+  const hits: SearchHit[] = [];
+  for (const b of html.split('class="result__body"').slice(1)) {
+    const link = b.match(/class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/);
+    if (!link) continue;
+    let href = link[1];
+    const uddg = href.match(/[?&]uddg=([^&]+)/);
+    if (uddg) href = decodeURIComponent(uddg[1]);
+    if (href.startsWith("//")) href = `https:${href}`;
+    const snippet = b.match(/class="result__snippet"[^>]*>([\s\S]*?)<\/a>/)?.[1] ?? "";
+    hits.push({ title: htmlToText(link[2]), url: href, snippet: htmlToText(snippet).slice(0, 400) });
+    if (hits.length >= n) break;
+  }
+  return hits;
+};
+
+/**
+ * Keyless, official developer indexes: the npm registry and GitHub repository search. Most
+ * research here is about libraries and APIs, and their homepages and READMEs are the docs.
+ */
+const developerIndexes: Engine = async (query, n) => {
+  const get = (url: string, headers: Record<string, string> = {}) =>
+    fetch(url, { headers, signal: AbortSignal.timeout(TIMEOUT_MS) })
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null);
+  const [npm, gh] = (await Promise.all([
+    get(`https://registry.npmjs.org/-/v1/search?text=${encodeURIComponent(query)}&size=5`),
+    get(`https://api.github.com/search/repositories?q=${encodeURIComponent(query)}&per_page=5`, { accept: "application/vnd.github+json", "user-agent": "DaedalusResearch" }),
+  ])) as [
+    { objects?: Array<{ package: { name: string; description?: string; links?: { homepage?: string; repository?: string; npm?: string } } }> } | null,
+    { items?: Array<{ full_name: string; html_url: string; homepage?: string | null; description?: string | null; stargazers_count: number }> } | null,
+  ];
+  const hits: SearchHit[] = [];
+  for (const { package: p } of npm?.objects ?? []) {
+    hits.push({ title: `npm package ${p.name}`, url: p.links?.homepage ?? p.links?.repository ?? p.links?.npm ?? `https://www.npmjs.com/package/${p.name}`, snippet: p.description ?? "" });
+  }
+  for (const r of gh?.items ?? []) {
+    hits.push({ title: `GitHub ${r.full_name} (${r.stargazers_count} stars)`, url: r.html_url, snippet: `${r.description ?? ""}${r.homepage ? ` Homepage: ${r.homepage}` : ""}` });
+  }
+  return hits.slice(0, n);
+};
+
+/**
+ * Web search through the first engine that answers: official APIs when a key is configured
+ * (Tavily, Brave), then DuckDuckGo, then the npm and GitHub indexes. The result says which
+ * engine answered, so the agent knows how much to trust it.
+ */
 export async function webSearch(input: { query: string; max_results?: number }): Promise<ToolOutput & { hits: SearchHit[] }> {
   const n = Math.min(input.max_results ?? 6, 10);
-  let hits: SearchHit[] = [];
-  const tavily = process.env.TAVILY_API_KEY;
-  if (tavily) {
-    const res = await fetch("https://api.tavily.com/search", {
-      method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${tavily}` },
-      body: JSON.stringify({ query: input.query, max_results: n, search_depth: "basic" }),
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-    });
-    if (res.ok) {
-      const j = (await res.json()) as { results?: Array<{ title: string; url: string; content: string }> };
-      hits = (j.results ?? []).map((r) => ({ title: r.title, url: r.url, snippet: r.content.slice(0, 400) }));
-    }
+  const engines: Array<[string, Engine]> = [
+    ["Tavily", tavily],
+    ["Brave", brave],
+    ["DuckDuckGo", duckDuckGo],
+    ["npm + GitHub", developerIndexes],
+  ];
+  for (const [name, engine] of engines) {
+    const hits = await engine(input.query, n).catch(() => [] as SearchHit[]);
+    if (!hits.length) continue;
+    const note =
+      name === "npm + GitHub"
+        ? "Web search engines returned nothing, so these are package and repository matches. Fetch a homepage or README for details.\n"
+        : "";
+    return { ok: true, text: `${note}${hits.map((h, i) => `${i + 1}. ${h.title}\n   ${h.url}\n   ${h.snippet}`).join("\n")}`, hits, engine: name };
   }
-  if (hits.length === 0) {
-    const res = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(input.query)}`, {
-      headers: { "user-agent": "Mozilla/5.0 (compatible; DaedalusResearch/1.0)" },
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-    });
-    const html = await res.text();
-    const blocks = html.split('class="result__body"').slice(1);
-    for (const b of blocks) {
-      const link = b.match(/class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/);
-      if (!link) continue;
-      let href = link[1];
-      const uddg = href.match(/[?&]uddg=([^&]+)/);
-      if (uddg) href = decodeURIComponent(uddg[1]);
-      if (href.startsWith("//")) href = `https:${href}`;
-      const snippet = b.match(/class="result__snippet"[^>]*>([\s\S]*?)<\/a>/)?.[1] ?? "";
-      hits.push({ title: htmlToText(link[2]), url: href, snippet: htmlToText(snippet).slice(0, 400) });
-      if (hits.length >= n) break;
-    }
-  }
-  if (hits.length === 0) return { ok: false, text: `No results for "${input.query}". Try different keywords.`, hits };
   return {
-    ok: true,
-    text: hits.map((h, i) => `${i + 1}. ${h.title}\n   ${h.url}\n   ${h.snippet}`).join("\n"),
-    hits,
+    ok: false,
+    text: `No results for "${input.query}". Web search may be unavailable right now: fetch the official documentation directly with web_fetch if you know where it lives (the project's website or its GitHub README).`,
+    hits: [],
   };
 }

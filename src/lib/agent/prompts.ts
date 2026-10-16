@@ -86,6 +86,7 @@ export const RESEARCH_PROMPT = `You are a research sub-agent working for Daedalu
 
 Method:
 - Search the web (web_search), then read the 2–5 most relevant pages (web_fetch). Prefer official documentation, package READMEs and changelogs, and reputable sources. Check that facts are current.
+- If a search comes back empty or with only package and repository matches, don't keep rephrasing it: fetch the official documentation directly (the project's website, its /docs page, or its GitHub README).
 - If the question is about the user's project, you can read its files (read_file, grep, glob).
 - Stop as soon as you can answer confidently. Don't exceed about 10 tool calls.
 

@@ -87,7 +87,8 @@ for await (const chunk of res.body) {
       }
       case "tool-output-error":
       case "tool-input-error":
-        console.log(ts(), `  ✗ ${e.type} ${inputs.get(e.toolCallId) ?? e.toolName ?? ""}: ${String(e.errorText).slice(0, 200)}`);
+        // Validation errors put the reason at the end: show both ends.
+        console.log(ts(), `  ✗ ${e.type} ${inputs.get(e.toolCallId) ?? e.toolName ?? ""}: ${String(e.errorText).slice(0, 160)} … ${String(e.errorText).slice(-400)}`);
         break;
       case "data-status":
         console.log(ts(), "status:", e.data?.note);

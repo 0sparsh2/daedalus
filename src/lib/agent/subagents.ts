@@ -8,7 +8,7 @@ import type { AnyProviderId } from "@/lib/llm/providers";
 import { attachProjectSandbox, type SandboxHandle } from "@/lib/sandbox";
 import { addRunUsage, endSpan, recordSpan, startSpan } from "@/lib/trace/spans";
 import { EXPLORE_PROMPT, RESEARCH_PROMPT } from "./prompts";
-import { ToolError, stableId } from "./runtime";
+import { ToolError, errorDetail, stableId } from "./runtime";
 import type { RunScope, ToolOutput } from "./scope";
 import * as impl from "./tools/impl";
 import { webFetch, webSearch } from "./tools/web";
@@ -86,6 +86,8 @@ export async function runSubagent(
 
   let sandbox: SandboxHandle | undefined;
   const getSandbox = async () => (sandbox ??= await attachProjectSandbox(scope.projectId));
+  // What the tools found, kept so a sub-agent that fails or writes nothing still reports back.
+  const findings: string[] = [];
 
   // Each sub-agent tool records a child span under the sub-agent span.
   const traced = <I extends Record<string, unknown>>(name: string, fn: (input: I) => Promise<ToolOutput>) =>
@@ -101,6 +103,7 @@ export async function runSubagent(
         out = { ok: false, text: `Error: ${err instanceof ToolError || err instanceof Error ? err.message : String(err)}` };
       }
       step.ok = out.ok;
+      if (out.ok) findings.push(`${name} ${step.label}:\n${out.text.slice(0, 700)}`);
       await Promise.all([
         emit(),
         recordSpan({
@@ -171,31 +174,48 @@ export async function runSubagent(
     spanId,
     agent: kind,
   });
+  const maxSteps = kind === "research" ? 12 : 16;
   const agent = new ToolLoopAgent({
     model: new GatewayModel({ provider: scope.provider as AnyProviderId, modelId: scope.subagentModel, gatewayURL: scope.gatewayURL, token }),
     instructions: kind === "research" ? RESEARCH_PROMPT : EXPLORE_PROMPT,
     tools,
-    stopWhen: isStepCount(kind === "research" ? 12 : 16),
+    stopWhen: isStepCount(maxSteps),
+    // The last step has no tools, so the sub-agent ends with a written answer, not a tool call.
+    prepareStep: ({ stepNumber }) => (stepNumber >= maxSteps - 1 ? { activeTools: [] } : undefined),
     maxRetries: 3,
     maxOutputTokens: 8_192,
     providerOptions: scope.subagentRequestOptions ? { [scope.provider]: scope.subagentRequestOptions as Record<string, never> } : undefined,
   });
 
+  // Some models write typographic hyphens and spaces (U+2011, U+00AD, U+202F), which break URLs
+  // and identifiers when the main agent copies them into code.
+  const plain = (t: string) => t.replace(/[\u2010\u2011]/g, "-").replace(/\u00AD/g, "").replace(/[\u00A0\u202F]/g, " ");
+  const digest = () => plain(findings.slice(-6).join("\n\n"));
   try {
     const result = await agent.generate({ prompt: input.task, timeout: { totalMs: 200_000 } });
-    const summary = result.text.trim() || "The sub-agent finished without a written summary.";
+    const written = plain(result.text.trim());
+    const summary =
+      written ||
+      (findings.length
+        ? `The ${kind} sub-agent didn't write a summary. What its tools found:\n\n${digest()}`
+        : `The ${kind} sub-agent finished without findings. Continue without it or try a narrower task.`);
     progress.status = "done";
     progress.summary = summary;
     await emit();
-    await endSpan(spanId, { status: "ok", output: { summary: summary.slice(0, 3000) }, startedAt, attrs: { steps: result.steps.length } });
-    return { ok: true, text: summary, kind, steps: progress.steps.length };
+    await endSpan(spanId, { status: "ok", output: { summary: summary.slice(0, 3000) }, startedAt, attrs: { steps: result.steps.length, wroteSummary: Boolean(written) } });
+    return { ok: Boolean(written) || findings.length > 0, text: summary, kind, steps: progress.steps.length };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    const detail = errorDetail(err);
+    console.error(`[subagent] ${kind} failed:`, detail);
     progress.status = "error";
     progress.summary = message;
     await emit();
-    await endSpan(spanId, { status: "error", error: message, startedAt });
-    return { ok: false, text: `The ${kind} sub-agent failed: ${message}. Continue without it or try a narrower task.` };
+    await endSpan(spanId, { status: "error", error: detail, startedAt, attrs: { findings: findings.length } });
+    // Partial findings are still worth having; the main agent decides what to do with them.
+    return findings.length
+      ? { ok: true, text: `The ${kind} sub-agent stopped early (${message}). What it found before stopping:\n\n${digest()}`, kind, partial: true }
+      : { ok: false, text: `The ${kind} sub-agent failed: ${message}. Continue without it or try a narrower task.` };
   } finally {
     writer.releaseLock();
   }

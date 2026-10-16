@@ -76,6 +76,24 @@ function summarize(out: ToolOutput) {
 }
 
 /** Keeps the head and tail of long output, which is where errors and summaries live. */
+/**
+ * An error with what's needed to debug it from the trace: the message, the cause, and the
+ * start of the response body for API errors ("Invalid JSON response" says nothing on its own).
+ */
+export function errorDetail(err: unknown): string {
+  if (!(err instanceof Error)) return String(err);
+  const e = err as Error & { cause?: unknown; responseBody?: string; statusCode?: number };
+  const cause = e.cause instanceof Error ? e.cause.message : e.cause != null ? String(e.cause) : "";
+  return [
+    e.message,
+    e.statusCode ? `HTTP ${e.statusCode}` : "",
+    cause ? `cause: ${cause.slice(0, 600)}` : "",
+    e.responseBody ? `response: ${e.responseBody.slice(0, 600)}` : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
 export function truncateMiddle(s: string, max = 12_000): string {
   if (s.length <= max) return s;
   const head = Math.floor(max * 0.3);

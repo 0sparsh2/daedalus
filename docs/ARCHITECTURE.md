@@ -249,7 +249,7 @@ Read-only enforcement is double: plan mode only *exposes* read tools (`activeToo
 | `check_preview` | Crawls Vite's module graph from `index.html` (compile and import errors surface as HTTP 500s) and reads the dev log. If the user has the preview open, it reloads it there and collects the runtime errors and React warnings from that fresh load | No headless browser needed; says so plainly when no browser is watching |
 | `verify` | `tsc --noEmit` and `vite build`; parses `file(line,col): error TSxxxx` into structured diagnostics | Exit-code based |
 | `update_todos` | The agent's visible task list | |
-| `research` | Sub-agent with web search and fetch (plus read access to the project) | Own context; SSRF-guarded fetch; 12-step cap |
+| `research` | Sub-agent with web search and fetch (plus read access to the project) | Own context; SSRF-guarded fetch; 12-step cap, the last step without tools so it always writes an answer |
 | `explore` | Read-only sub-agent that maps a codebase | Own context; 16-step cap |
 | `propose_plan` | Plan mode's final answer, rendered as a plan card | Plan mode only |
 
@@ -290,6 +290,13 @@ Steps are persisted as they complete (`onStepEnd`), so a stopped or failed run s
 ### Sub-agents and tracing
 
 `research` and `explore` run inside one durable step as an in-process `ToolLoopAgent` with a fresh context window and the provider's fast model (for example gpt-oss-20b on NIM; the Agents tab can change it per project). Only their final summary returns to the main agent, which keeps its context small. Several can run in parallel (tool calls in one step run concurrently).
+
+What real runs on NIM taught the sub-agent layer:
+
+- **Search degrades in steps, never to nothing.** `web_search` tries official APIs first when a key is configured (Tavily, then Brave Search), then DuckDuckGo's no-JavaScript page, which now often answers automated traffic with a bot challenge, then the npm registry and GitHub repository search, which are keyless and official. The result says which engine answered. The research prompt sends the agent to the official docs directly when search comes back thin.
+- **A sub-agent always reports something.** The last step has no tools, so it ends with a written answer. If it still writes nothing, or a model call fails part-way, the main agent gets the findings its tools gathered instead of a bare error.
+- **Errors are diagnosable from the trace.** A failed model call records its cause and the start of the response body on the sub-agent span ("Invalid JSON response" alone says nothing).
+- **Output is made safe to copy.** Typographic hyphens and spaces (U+2011, U+00AD, U+202F) are normalized: gpt-oss wrote `geocoding‑api.open‑meteo.com` with non-breaking hyphens, a URL that would fail if pasted into code.
 
 Every run is traceable (`src/lib/trace/spans.ts`):
 

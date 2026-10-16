@@ -68,7 +68,7 @@ Open http://localhost:3000, describe an app and press Send. With `NEXT_PUBLIC_EN
 | `NEXT_PUBLIC_ENABLE_MOCK_PROVIDER`, `DAEDALUS_ENABLE_MOCK` | Show and allow the scripted mock model (dev/test only) |
 | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | GitHub OAuth app for "Connect GitHub" (callback `/api/github/callback`) |
 | `VERCEL_DEPLOY_TOKEN`, `VERCEL_DEPLOY_TEAM_ID` | Deploying users' apps to Vercel |
-| `TAVILY_API_KEY` | Optional: better web search for the research sub-agent (falls back to DuckDuckGo) |
+| `TAVILY_API_KEY`, `BRAVE_SEARCH_API_KEY` | Optional: web search APIs for the research sub-agent. Without them it falls back to DuckDuckGo, then npm and GitHub search |
 | `VERCEL_TOKEN`, `VERCEL_TEAM_ID`, `VERCEL_PROJECT_ID` | Vercel Sandbox from a non-Vercel host (on Vercel, OIDC is automatic) |
 
 ## Tests

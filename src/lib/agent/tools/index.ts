@@ -29,11 +29,12 @@ export const todoSchema = z.object({
 export const planSchema = z.object({
   title: z.string().describe("Name of the app, 2-5 words"),
   summary: z.string().describe("What it is and who it's for, in 2-3 plain sentences"),
-  features: z.array(z.string()).min(1).max(12).describe("Key screens and features for the first version"),
+  // Generous caps: rejecting a good plan over a 13th feature costs a whole model call.
+  features: z.array(z.string()).min(1).max(20).describe("Key screens and features for the first version"),
   design: z.string().describe("Visual direction: mood, colours, typography, layout"),
-  steps: z.array(z.string()).min(1).max(12).describe("Build steps, in order"),
-  assumptions: z.array(z.string()).max(8).optional().describe("Assumptions you made"),
-  questions: z.array(z.string()).max(3).optional().describe("Up to 3 questions whose answers would change the plan"),
+  steps: z.array(z.string()).min(1).max(16).describe("Build steps, in order"),
+  assumptions: z.array(z.string()).max(12).optional().describe("Assumptions you made"),
+  questions: z.array(z.string()).max(5).optional().describe("Up to 3 questions whose answers would change the plan"),
 });
 
 export function buildTools() {
