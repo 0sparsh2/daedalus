@@ -24,7 +24,7 @@ Daedalus is a vibe-coding platform for both non-technical and technical builders
 | Sandboxes | Vercel Sandbox (Firecracker microVMs, persistent snapshots) in production; Docker for local dev and CI |
 | Auth and data | Supabase: Auth (GitHub, Google, email), Postgres with row-level security, Realtime |
 | Models | User keys for Anthropic, OpenAI, DeepSeek, NVIDIA NIM (OpenAI-compatible), behind our gateway |
-| Generated apps | Vite 8, React 19, TypeScript, Tailwind CSS v4 starter (`sandbox-template/`) |
+| Generated apps | Vite 8, React 19, TypeScript, Tailwind CSS v4 starter with a small UI kit (`sandbox-template/`) |
 
 ```
 src/
@@ -62,6 +62,7 @@ Open http://localhost:3000, describe an app and press Send. With `NEXT_PUBLIC_EN
 | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY` | Supabase project (`supabase status` prints local values) |
 | `CREDENTIALS_ENCRYPTION_KEY` | 32 random bytes, base64 (`openssl rand -base64 32`); encrypts model keys and GitHub tokens |
 | `GATEWAY_TOKEN_SECRET` | 32+ random characters; signs run tokens for the LLM gateway |
+| `GATEWAY_MAX_CALL_MS` | Optional: cap on one streamed model call (default 280000, under the gateway's 300 s function limit) |
 | `SANDBOX_PROVIDER` | `docker` locally, `vercel` in production (the default on Vercel) |
 | `NEXT_PUBLIC_AUTH_PROVIDERS` | Sign-in options to show, e.g. `github,google,email` |
 | `NEXT_PUBLIC_ENABLE_MOCK_PROVIDER`, `DAEDALUS_ENABLE_MOCK` | Show and allow the scripted mock model (dev/test only) |
@@ -77,6 +78,10 @@ pnpm typecheck && pnpm lint
 pnpm test                                 # unit: edit engine, gateway, repair, loop control, history, parts
 node scripts/smoke-api.mjs hello          # API end to end: hello | broken | research | plan
 node scripts/smoke-stop.mjs               # stopping a run mid-way
+TEST_NVIDIA_API_KEY=… node scripts/smoke-real.mjs "<prompt>" nvidia/nemotron-3-super-120b-a12b
+                                          # a real build on NIM; STOP_AFTER_MS=25000 presses Stop mid-run
+TEST_NVIDIA_API_KEY=… node scripts/eval-real.mjs nvidia/nemotron-3-super-120b-a12b 3
+                                          # golden-task evals: build on a real model, then score the app
 node tests/e2e/ui-flow.mjs                # browser: Send → sign up → connect model → plan → build → preview/code/trace
 node tests/e2e/rules-audit.mjs            # UI rules audit: contrast, names, labels, targets, headings (desktop/phone, light/dark)
 ```

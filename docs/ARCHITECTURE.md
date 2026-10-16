@@ -246,7 +246,7 @@ Read-only enforcement is double: plan mode only *exposes* read tools (`activeToo
 | `delete_file` | Remove a file or folder | Root and protected paths refused |
 | `run_command` | Non-interactive bash in the project | 120 s default, 240 s max; head and tail truncation; blocks dev-server starts, `git push`, destructive commands; restarts Vite after installs |
 | `dev_server` | Status, restart, logs | |
-| `check_preview` | Crawls Vite's module graph from `index.html` (compile and import errors surface as HTTP 500s), reads the dev log, and adds runtime errors reported by the user's browser | No headless browser needed |
+| `check_preview` | Crawls Vite's module graph from `index.html` (compile and import errors surface as HTTP 500s) and reads the dev log. If the user has the preview open, it reloads it there and collects the runtime errors and React warnings from that fresh load | No headless browser needed; says so plainly when no browser is watching |
 | `verify` | `tsc --noEmit` and `vite build`; parses `file(line,col): error TSxxxx` into structured diagnostics | Exit-code based |
 | `update_todos` | The agent's visible task list | |
 | `research` | Sub-agent with web search and fetch (plus read access to the project) | Own context; SSRF-guarded fetch; 12-step cap |
@@ -271,24 +271,25 @@ Recovery is layered, from cheapest to most drastic:
    - A transient sandbox or network error is rethrown on early attempts, so the durable step retries with backoff.
    - Model calls retry on 408, 409, 429 and 5xx and honour `Retry-After`.
    - Side-effecting steps like `run_command` retry at most once.
-3. **Tool-call repair** (`src/lib/agent/repair.ts`). Open models often call `bash`, `str_replace` or `TodoWrite` (other harnesses' names), use camelCase keys, or wrap JSON in code fences. We map those to our tools and keys before the call fails.
+3. **Tool-call repair** (`src/lib/agent/repair.ts`). Open models often call `bash`, `str_replace` or `TodoWrite` (other harnesses' names), use camelCase keys, or wrap JSON in code fences. We map those to our tools and keys before the call fails. The repair is also schema-aware: it reads the tool's JSON schema to rename a misspelt key to the missing one it resembles, decode arrays and objects sent as JSON strings, and drop stray fields. A real case from Nemotron: `update_todos({"tos": "[{…}]"})` now runs as `update_todos({"todos": [{…}]})` instead of costing a retry.
 4. **Doom-loop guard.** If the same tool is called with the same input three steps running, a corrective note is injected: "stop repeating it, re-read the error, try a different approach".
 5. **Context management.**
    - Within a run, old tool outputs are replaced with stubs once the prompt passes 55% of the model's window; files can always be re-read.
    - Across runs, earlier turns are compacted to their prose plus an action ledger ("changed src/App.tsx · ran npm install zod · verify passed"); approved plans are kept in full.
 6. **Step budget.** 70 steps for build, 24 for plan, with a "wrap up and verify" note four steps before the limit.
 7. **The automatic check gate.** It's independent of what the model claims: type-check, build and preview probe must pass, or the failures go back to the agent for up to three rounds.
-8. **Stop.**
+8. **Stop, even mid-call.**
    - The user's Stop marks the run cancelled.
-   - The gateway answers the next model call with HTTP 410, which is deliberately not retryable.
-   - The loop ends at that step boundary, and the finish step still commits what was done.
-9. **Always finish cleanly.** Any unexpected throw inside the workflow is caught, and the run still persists its message, checkpoints its work, closes its stream and records the error.
+   - While a model call is streaming, the gateway checks the run every 4 seconds and cuts the upstream call off, ending the stream with an error event in the provider's own format. Any later call gets HTTP 410, which is deliberately not retryable.
+   - The loop ends there, the finish step still commits what was done, and the chat shows "Stopped. Changes made so far are kept." Measured with GLM-5.3 on NIM: Stop pressed in the middle of a call, run ended 3.7 seconds later.
+9. **Bounded model calls.** Each call is capped at 280 seconds (`GATEWAY_MAX_CALL_MS`), just under the gateway function's 300-second limit. A model stuck reasoning ends with "The model call ran longer than 280 s and was cut off. Try a faster model." instead of a silent platform timeout.
+10. **Always finish cleanly.** Any unexpected throw inside the workflow is caught, and the run still persists its message, checkpoints its work, closes its stream and records the error.
 
 Steps are persisted as they complete (`onStepEnd`), so a stopped or failed run shows everything it did.
 
 ### Sub-agents and tracing
 
-`research` and `explore` run inside one durable step as an in-process `ToolLoopAgent` with a fresh context window and the provider's fast model (for example GLM-5.3 Flash on NIM). Only their final summary returns to the main agent, which keeps its context small. Several can run in parallel (tool calls in one step run concurrently).
+`research` and `explore` run inside one durable step as an in-process `ToolLoopAgent` with a fresh context window and the provider's fast model (for example gpt-oss-20b on NIM; the Agents tab can change it per project). Only their final summary returns to the main agent, which keeps its context small. Several can run in parallel (tool calls in one step run concurrently).
 
 Every run is traceable (`src/lib/trace/spans.ts`):
 
@@ -309,7 +310,25 @@ The workspace's **Agents** tab shows the team working on the project:
 
 ### Prompts and project memory
 
-The system prompt (`src/lib/agent/prompts.ts`) describes the environment (sandbox, the dev server already running, automatic versioning), the workflow (task list, read before you write, verify and check the preview, summarise for a non-technical user), a quality bar (responsive, accessible, realistic content, no `any`), rules against looping, and when to delegate. The project's own `AGENTS.md` is appended, the same convention Codex and Claude Code use, so users and imported repos can steer the agent.
+The system prompt (`src/lib/agent/prompts.ts`) describes the environment (sandbox, the dev server already running, automatic versioning), the workflow (task list, read before you write, verify and check the preview, summarise for a non-technical user), a quality bar (a small visual system, responsive, accessible, realistic content, no `any`), rules against looping, and when to delegate. The project's own `AGENTS.md` is appended, the same convention Codex and Claude Code use, so users and imported repos can steer the agent.
+
+**Good defaults beat long instructions.** The starter app ships a small UI kit in `src/components/ui` (`Page`, `PageHeader`, `Card`, `Button`, `Input`, `Field`, `EmptyState`, `Badge`), with the accent colour defined once in `theme.ts`. Composing from these gives consistent spacing, focus rings and touch targets even from models that only follow part of the quality bar. It's the same idea as the shadcn/ui starters other builders use, at a size an agent can read in one call. The starter also ships `useLocalStorage`, a `useState` that survives reloads, because hand-written load/save effects are the most common way generated apps lose data. Some rules are enforced rather than asked for: the kit's `Button` type requires an `aria-label` when `size="icon"`, so `verify` fails on an unnamed icon button, and the preview bridge flags any unnamed button or link on each load.
+
+### Measuring the harness: golden-task evals
+
+Prompt and harness changes are measured, not eyeballed. `scripts/eval-real.mjs` builds a fixed request on a real model through the whole pipeline. Then `tests/evals/habit-tracker.mjs` uses the generated app the way a person would: add three habits, tick one, check the streak, reload, remove one, reload, then look for console errors and phone layout problems.
+
+Results on Nemotron 3 Super for "Build a habit tracker: add and remove habits, tick a habit off for today, show a streak count per habit, and keep everything in localStorage":
+
+| Harness version | Score | What happened |
+| --- | --- | --- |
+| Prompt with a visual quality bar | 10/11 | Worked; React warned about a `<circle>` rendered outside an `<svg>` |
+| + starter UI kit | 6/10 | Looked better, but the only add form lived in the empty state, and hand-written load/save effects lost data on reload |
+| + `useLocalStorage` and a self-review step | 11/11 | Every step passed, on desktop and phone |
+| Same, two more runs | 6/11, 6/11 | Tick and delete were icon-only buttons with no name: unusable with a screen reader, and invisible to the test |
+| + `aria-label` required by the kit's icon `Button` type, and an accessibility pass in the preview bridge | 11/11, 11/11 | Every step passed in both runs (202 s and 211 s) |
+
+The automatic check passed every one of these builds: type checks, builds and runtime errors can't see a missing feature, and that gap is what the eval covers. **Next:** more tasks (a form-heavy app, a dashboard, an imported repo), several runs per change, and a run on every prompt change in CI.
 
 ---
 
@@ -322,12 +341,31 @@ The system prompt (`src/lib/agent/prompts.ts`) describes the environment (sandbo
   - Inside a step, it builds the right client: `@ai-sdk/anthropic`, `@ai-sdk/openai` (Responses API), `@ai-sdk/deepseek`, or `@ai-sdk/openai-compatible` for NIM.
   - That client is always pointed at **our gateway** with the run token as its key.
   - It serializes to four strings (provider, model, gateway URL, token), which is exactly what a durable workflow needs between steps.
-- **Provider-neutral history.** Conversations are stored as AI SDK `UIMessage` parts and converted per call, so switching from Kimi to Claude in the middle of a project just works. Tool schemas are plain JSON Schema (zod), so every provider gets the same tools.
+- **Provider-neutral history.** Conversations are stored as AI SDK `UIMessage` parts and converted per call, so switching from Nemotron to Claude in the middle of a project just works. Tool schemas are plain JSON Schema (zod), so every provider gets the same tools.
 - **Quirk handling lives in the harness, not the product:**
   - tool-call repair for models that drift from the schema;
   - explicit output budgets (some providers default to about 1k tokens, which truncates file writes into broken tool calls);
+  - per-model request options in the registry (`requestOptions`, sent as provider options). GLM-5.3 on NIM, for example, gets `reasoning_effort: "low"`: without it, one call reasoned for more than 10 minutes;
   - reasoning tokens shown as a collapsible "Thinking" block when the model emits them.
 - **Adding a provider** means adding a registry entry; plus a `case` in `GatewayModel` only if it doesn't speak the OpenAI, Anthropic or DeepSeek dialect. Gemini, for example, works today through Google's OpenAI-compatible endpoint, or natively via `@ai-sdk/google` with one extra case.
+
+### Tested on NVIDIA NIM with a real key
+
+`scripts/probe-nim.mjs` checks each NIM model for chat, streaming and tool calls. `scripts/smoke-real.mjs` runs a whole build through the real pipeline (account, key check, gateway, durable run, sandbox, automatic check) and prints the trace summary.
+
+| Model | Role in Daedalus | Measured |
+| --- | --- | --- |
+| Nemotron 3 Super (`nvidia/nemotron-3-super-120b-a12b`) | Default builder | Builds the habit tracker from the golden-task evals (section 4) so it passes 11/11, three runs in a row, in 3½–5 minutes with 24–28 model calls, fixing its own type errors along the way |
+| GLM-5.3 (`z-ai/glm-5.3`) | Stronger coder, slower | Without limits, one call reasoned for more than 10 minutes. With `reasoning_effort: "low"` from the registry: median call 5.2 s, and Stop pressed mid-call ended the run 3.7 s later |
+| gpt-oss-20b (`openai/gpt-oss-20b`) | Sub-agents (fast) | The quickest of the three; 8k output budget |
+
+What the real runs changed in the harness:
+
+- Per-model request options in the registry, a per-call time cap and Stop that cuts a call mid-stream (sections 4 and 7).
+- Not every NIM account can reach every model: Kimi K2.6 answers 404 "Not found for account" for some keys. The key check pings the chosen model, so the user hears about it at sign-up, not mid-build.
+- Free-tier models can be busy. The key check then validates the key against a lighter model and shows a warning, instead of rejecting a working key.
+- Schema-aware tool-call repair, from a real Nemotron call (section 4).
+- The starter UI kit, after the first real build came out plain (section 4, "Prompts and project memory").
 
 ---
 
@@ -338,7 +376,7 @@ The system prompt (`src/lib/agent/prompts.ts`) describes the environment (sandbo
 | Run stream | `POST /api/chat` → Server-Sent Events of AI SDK UI message chunks; reconnect with `GET /api/chat/{workflowRunId}/stream?startIndex=n` | Live text, reasoning, tool calls and results, `data-*` parts (sandbox status, preview URL, sub-agent progress, checks, checkpoint) |
 | REST | `/api/projects`, `/api/credentials`, `/api/runs/:id/spans`, `/api/projects/:id/files`, `…/file`, `…/restore`, `…/preview`, `…/github`, `…/deploy` | Everything else; all authorized with the Supabase session (cookie, or bearer token for API clients and tests) |
 | Preview | The browser loads `https://<sandbox-domain>` in an iframe; Vite's HMR websocket connects directly to the sandbox | The live app, hot-reloading as the agent edits |
-| Preview → workspace | A bridge script in the app (injected by a dev-only Vite plugin) `postMessage`s runtime errors and navigation to the parent; the workspace checks the origin, shows the error with "Ask Daedalus to fix it", and forwards it to `/api/projects/:id/preview-errors`, where the agent's `check_preview` reads it | Closing the loop on errors only a real browser sees |
+| Preview → workspace | A bridge script in the app (injected by a dev-only Vite plugin) `postMessage`s runtime errors and navigation to the parent; the workspace checks the origin, shows the error with "Ask Daedalus to fix it", and forwards it to `/api/projects/:id/preview-errors`, where the agent's `check_preview` reads it. When a check runs, the workspace reloads the preview and tags what that load reports with the check's id, so the check reads exactly the errors from the current code (React warns once per page load, and request order doesn't match event order) | Closing the loop on errors only a real browser sees |
 | Workspace → preview | The workspace `postMessage`s `select-mode` into the iframe; the bridge outlines elements under the cursor and, on click, describes the element (tag, text, a short CSS path) back. The composer is pre-filled with "Change the button "Book now" (at main > section.hero > …): " | Select-to-edit: point at the thing you want changed |
 
 **Resumable streaming.** The run writes to a durable stream owned by the workflow. `WorkflowChatTransport` replays from the last chunk index after a dropped connection, and the workspace reconnects to an in-flight run on page load. Our UI transform (`src/lib/agent/ui-transform.ts`) keeps the `data-*` parts that the stock transform drops, and pins the assistant message id so the live message and the saved one are the same message. Tool inputs stream too: while the model is still writing a file, its card shows the code arriving, line by line.
@@ -362,8 +400,8 @@ For each call it:
 1. **Authenticates the run token**: an HS256 JWT carrying user, run, project, provider and parent span, valid 6 hours. A token for one provider can't be used against another.
 2. **Applies policy.** The run must exist, belong to the user and still be active (a stopped run gets 410). Paths are allowlisted per provider (`chat/completions`, `messages`, `responses`, `models`), which also blocks SSRF through the gateway. Budgets and rate limits are applied here (**next**).
 3. **Custodies keys.** It loads the user's credential, decrypts it in memory for this request only, and sends it as `Authorization` or `x-api-key`. A 401 from the provider marks the key invalid so the UI can ask for a new one.
-4. **Forwards with streaming intact.** Bytes are passed through untouched while SSE events are sniffed for usage. Provider errors and `Retry-After` pass through, so SDK retries behave normally.
-5. **Meters and traces.** It records an `llm` span (time to first byte, duration, token counts, status) and increments the run's usage counters.
+4. **Forwards with streaming intact, and bounds every call.** Bytes are passed through untouched while SSE events are sniffed for usage. Provider errors and `Retry-After` pass through, so SDK retries behave normally. One abort controller covers the upstream call: the client going away, the user's Stop (polled every 4 s while streaming) or the 280 s cap all cut it off, and the stream ends with an error event the SDK surfaces like any provider error.
+5. **Meters and traces.** It records an `llm` span (time to first byte, duration, token counts, status) and increments the run's usage counters. A call cut off by Stop is traced as `cancelled`, not as an error; calls refused after Stop never reached the model and aren't recorded.
 
 **Why a gateway instead of decrypting the key in the workflow:**
 
