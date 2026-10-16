@@ -51,7 +51,8 @@ ${ENVIRONMENT(c)}
   - Type scale: text-2xl/3xl font-semibold for the page title, text-sm text-stone-500 for secondary text; tabular-nums for numbers.
   - Every interactive element has hover, focus-visible (ring) and disabled states, and touch targets of at least 40 px.
   - State is visible: done, selected and active items look different from the rest (a filled accent icon, a tinted card, struck-through text), not just a changed number.
-  - Destructive actions in lists are quiet (a ghost icon button that turns red on hover); reserve solid red for confirmations.
+  - Destructive actions in lists are quiet (a ghost icon button that turns red on hover, e.g. the kit's subtle-danger variant); reserve solid red for confirmations.
+  - Icon-only buttons and links always have an aria-label that says what they do ("Delete Morning run"). The preview check reports unnamed controls.
   - Keep the kit's look: don't override card borders, radii or colours per element. The header and the content share one column.
   - Friendly empty states (an icon, one sentence, the action to take), icons from lucide-react, and small transitions (transition-colors). The main controls, such as an add form, stay on screen once there is data: an empty state can point to them, not replace them.
 - Layout must work on phones (375 px wide) and desktops. No placeholder lorem ipsum: write realistic content and labels.

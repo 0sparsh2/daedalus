@@ -92,5 +92,18 @@
     if (d.type === "reload") location.reload();
     if (d.type === "navigate" && typeof d.path === "string") { history.pushState(null, "", d.path); dispatchEvent(new PopStateEvent("popstate")); }
   });
-  window.addEventListener("load", function () { post("ready", { path: location.pathname }); });
+  // Accessibility pass on each load: buttons and links a screen reader can't name (icon-only).
+  var audit = function () {
+    var unnamed = [];
+    document.querySelectorAll("button, a[href], [role=button], [role=link]").forEach(function (el) {
+      if (el.getClientRects().length === 0 || el.closest("[aria-hidden=true]")) return;
+      var label = el.getAttribute("aria-label") || el.getAttribute("aria-labelledby") || el.getAttribute("title") || el.textContent || "";
+      if (!label.trim() && !el.querySelector("img[alt]:not([alt=''])")) unnamed.push(describe(el).path || el.tagName.toLowerCase());
+    });
+    if (unnamed.length) report("a11y", unnamed.length + " button(s) or link(s) have no accessible name; icon-only controls need an aria-label: " + unnamed.slice(0, 5).join(" | "));
+  };
+  window.addEventListener("load", function () {
+    post("ready", { path: location.pathname });
+    setTimeout(audit, 800);
+  });
 })();

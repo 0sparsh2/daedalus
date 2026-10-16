@@ -236,8 +236,8 @@ export async function checkPreview(
   const load = await browser.catch(() => null);
   let runtime: Array<{ kind: string; message: string; stack: string | null }> = [];
   if (fresh && load?.loaded) {
-    // The first render (and its warnings) can land just after the load event.
-    const settle = 1500 - (Date.now() - load.seenAt);
+    // The first render, its warnings and the bridge's accessibility pass land just after load.
+    const settle = 2000 - (Date.now() - load.seenAt);
     if (settle > 0) await new Promise((res) => setTimeout(res, settle));
     const { data } = await supabaseAdmin()
       .from("preview_errors")

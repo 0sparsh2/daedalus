@@ -27,7 +27,9 @@ for (const [i, name] of names.entries()) {
 }
 // Tick the first habit: the first button in its card/row named like done/complete/mark/check/tick/toggle.
 const row = page.locator("li, article, [class*='card'], [class*='rounded']").filter({ hasText: names[0] }).last();
-const tick = row.getByRole("button", { name: /done|complete|mark|check|tick|today|toggle/i }).first();
+// A checkbox is a fine tick control too.
+const tickButton = row.getByRole("button", { name: /done|complete|mark|check|tick|today|toggle/i }).first();
+const tick = (await tickButton.count()) ? tickButton : row.getByRole("checkbox").first();
 const ticked = await tick.click({ timeout: 3000 }).then(() => true, () => false);
 check("tick the first habit for today", ticked);
 await page.waitForTimeout(300);
@@ -39,7 +41,7 @@ const allThere = (await Promise.all(names.map((n) => page.getByText(n, { exact: 
 check("after reload: all habits are still there", allThere);
 check("after reload: the streak is still 1", /\b1\b/.test(await rowText()), await rowText());
 const row3 = page.locator("li, article, [class*='card'], [class*='rounded']").filter({ hasText: names[2] }).last();
-const removed = await row3.getByRole("button", { name: /remove|delete/i }).first().click({ timeout: 3000 }).then(() => true, () => false);
+const removed = await row3.getByRole("button", { name: /remove|delete|trash/i }).first().click({ timeout: 3000 }).then(() => true, () => false);
 await page.waitForTimeout(300);
 check("remove a habit", removed && !(await page.getByText(names[2], { exact: true }).first().isVisible().catch(() => false)));
 await page.reload({ waitUntil: "networkidle" });
