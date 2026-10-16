@@ -157,6 +157,9 @@ export function HomeClient({ projects }: { projects: ProjectCard[] }) {
       <footer className="foot">
         <span>Your keys, your models: Anthropic, OpenAI, DeepSeek or NVIDIA NIM.</span>
         <span>Every change is saved as a version you can restore.</span>
+        <a href="/prototype.html" target="_blank" rel="noreferrer">
+          Explore the full product design (agents, automations, customize) <Icon name="ext" size={12} />
+        </a>
       </footer>
     </div>
   );

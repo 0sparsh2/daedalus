@@ -37,6 +37,9 @@ export function UserMenu() {
           <button className="opt" role="menuitem" onClick={() => { setOpen(false); void openKeys(); }}>
             <Icon name="key" /> Manage model keys
           </button>
+          <a className="opt" role="menuitem" href="/prototype.html" target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
+            <Icon name="sparkle" /> Product design tour
+          </a>
           <button className="opt" role="menuitem" onClick={() => void signOut()}>
             <Icon name="logout" /> Sign out
           </button>
