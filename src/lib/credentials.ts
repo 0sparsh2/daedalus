@@ -15,6 +15,7 @@ export interface CredentialSummary {
 export interface ValidationResult {
   ok: boolean;
   error?: string;
+  warning?: string;
   /** Live model ids the key can use, when the provider lists them. */
   models?: string[];
 }
@@ -47,15 +48,26 @@ export async function validateKey(provider: AnyProviderId, apiKey: string, model
   }
   try {
     if (provider === "nvidia") {
-      const res = await call(`${p.upstream}/chat/completions`, {
-        method: "POST",
-        headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
-        body: JSON.stringify({ model, messages: [{ role: "user", content: "ping" }], max_tokens: 1, stream: false }),
-      });
-      if (res.status === 401 || res.status === 403) return { ok: false, error: "NVIDIA rejected this key." };
-      if (res.status === 404) return { ok: false, error: `This key can't reach ${model}. Pick another model.` };
-      if (!res.ok) return { ok: false, error: `NVIDIA returned ${res.status}: ${await errorText(res)}` };
-      return { ok: true };
+      const ping = (m: string) =>
+        call(`${p.upstream}/chat/completions`, {
+          method: "POST",
+          headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
+          body: JSON.stringify({ model: m, messages: [{ role: "user", content: "ping" }], max_tokens: 1, stream: false }),
+        });
+      let res: Response | null = null;
+      try {
+        res = await ping(model);
+      } catch {
+        res = null; // timed out: the model is busy, not necessarily the key
+      }
+      if (res && (res.status === 401 || res.status === 403)) return { ok: false, error: "NVIDIA rejected this key." };
+      if (res && res.status === 404) return { ok: false, error: `This key can't reach ${model}. Pick another model.` };
+      if (res?.ok) return { ok: true };
+      // Busy or overloaded (timeout, 429, 5xx): check the key on a small, usually-free model instead.
+      const fallback = await ping("openai/gpt-oss-20b").catch(() => null);
+      if (fallback && (fallback.status === 401 || fallback.status === 403)) return { ok: false, error: "NVIDIA rejected this key." };
+      if (fallback?.ok) return { ok: true, warning: `Your key works, but ${model} is busy on NVIDIA right now. If runs are slow, pick another model.` };
+      return { ok: false, error: `NVIDIA is busy right now (${res ? `HTTP ${res.status}` : "timed out"}). Try again in a minute or pick another model.` };
     }
     if (provider === "anthropic") {
       const res = await call(`${p.upstream}/models?limit=100`, {

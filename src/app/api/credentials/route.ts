@@ -32,7 +32,7 @@ export async function POST(req: Request) {
     const check = await validateKey(provider, apiKey, model);
     if (!check.ok) return jsonError(422, check.error ?? "The key was rejected.", "key_rejected");
     await saveCredential(user.id, provider, apiKey, model);
-    return Response.json({ ok: true, active: { provider, model }, models: check.models?.slice(0, 200) });
+    return Response.json({ ok: true, active: { provider, model }, warning: check.warning, models: check.models?.slice(0, 200) });
   });
 }
 
