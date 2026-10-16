@@ -151,7 +151,8 @@ button.chip:hover:not(:disabled) { border-color: var(--muted); }
 .proj-card { display: grid; gap: 4px; padding: 14px; text-decoration: none; border: 1px solid var(--line); background: var(--surface); border-radius: var(--r-2); min-width: 0; }
 .proj-card:hover { border-color: var(--line-strong); box-shadow: var(--shadow); }
 .proj-card b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.foot { padding: 16px 20px; color: var(--faint); font-size: 13px; display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; }
+.foot { padding: 16px 20px; color: var(--faint); font-size: 13px; display: flex; gap: 6px 16px; flex-wrap: wrap; justify-content: center; align-items: center; }
+.foot a { display: inline-flex; align-items: center; gap: 4px; min-height: 24px; color: var(--muted); }
 
 /* Composer */
 .composer { background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--r-3); box-shadow: var(--shadow); display: grid; }
@@ -173,7 +174,7 @@ button.chip:hover:not(:disabled) { border-color: var(--muted); }
 .pop .group { padding: 8px 8px 4px; }
 .pop .opt { width: 100%; display: flex; align-items: center; gap: 8px; text-align: left; padding: 7px 8px; border-radius: var(--r-1); font-size: 14px; }
 .pop .opt:hover:not(:disabled) { background: var(--sunk); }
-.pop .opt[aria-checked="true"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.pop .opt[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .pop .opt .meta { margin-left: auto; font-size: 12px; color: var(--faint); }
 .pop .lockrow { display: flex; align-items: center; gap: 8px; padding: 6px 8px; font-size: 13px; color: var(--muted); }
 .scrim { position: fixed; inset: 0; background: rgba(14, 17, 22, 0.42); z-index: 60; display: grid; place-items: center; padding: 16px; }
@@ -252,7 +253,7 @@ button.chip:hover:not(:disabled) { border-color: var(--muted); }
 .subagent .sa-steps { list-style: none; margin: 0; padding: 0 10px 8px 30px; display: grid; gap: 3px; font-size: 12.5px; color: var(--muted); }
 .subagent .sa-sum { border-top: 1px solid var(--line); padding: 8px 10px; }
 .plan-card { border: 1px solid var(--accent); border-radius: var(--r-3); background: var(--surface); padding: 14px 16px; display: grid; gap: 10px; }
-.plan-card h3 { font-size: 17px; }
+.plan-card .plan-title { font-size: 17px; font-weight: 650; }
 .plan-card ul, .plan-card ol { margin: 0; padding-left: 20px; display: grid; gap: 3px; font-size: 14px; }
 .plan-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .banner { display: flex; gap: 8px; align-items: flex-start; padding: 8px 10px; border-radius: var(--r-1); font-size: 13.5px; }
@@ -299,7 +300,7 @@ button.chip:hover:not(:disabled) { border-color: var(--muted); }
 .span-row[aria-selected="true"] { background: var(--accent-soft); }
 .span-name { display: flex; gap: 6px; align-items: center; min-width: 0; }
 .span-name .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.kind { font: 600 10px var(--mono); letter-spacing: 0.04em; text-transform: uppercase; border-radius: 4px; padding: 1px 5px; flex: none; }
+.kind { font: 600 12px var(--mono); letter-spacing: 0.02em; text-transform: uppercase; border-radius: 4px; padding: 0 5px; flex: none; }
 .kind.run { background: var(--text); color: var(--bg); }
 .kind.llm { background: var(--needs-soft); color: var(--needs); }
 .kind.tool { background: var(--sunk); color: var(--muted); }
@@ -350,8 +351,12 @@ button.chip:hover:not(:disabled) { border-color: var(--muted); }
   .topbar .pname { display: none; }
   .topbar .btn .pill { display: none; }
 }
+@media (max-width: 560px) {
+  .pop.picker { position: fixed; left: 16px !important; right: 16px !important; width: auto !important; bottom: 132px !important; top: auto !important; }
+}
 @media (pointer: coarse) {
-  .btn, .chip, .tabs .tab, .mode button { min-height: 44px; }
+  .btn, .btn.sm, .chip, .tabs .tab, .mode button, .input, .select, .pop .opt, .brand, .foot a { min-height: 44px; }
+  .tool > summary, .thinking summary, .sa-sum summary, .filetree button, .span-row, .trace-head .select { min-height: 44px; }
   .iconbtn { width: 44px; height: 44px; }
   .send { width: 44px; height: 44px; }
 }

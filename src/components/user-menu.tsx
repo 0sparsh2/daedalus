@@ -18,11 +18,11 @@ export function UserMenu() {
   const initial = (user.email ?? "?")[0].toUpperCase();
   return (
     <div className="menu-wrap" ref={ref}>
-      <button className="iconbtn" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)} aria-label="Account menu" style={{ borderRadius: "50%", background: "var(--sunk)", color: "var(--text)", fontWeight: 600 }}>
+      <button className="iconbtn" aria-expanded={open} onClick={() => setOpen((o) => !o)} aria-label="Account menu" style={{ borderRadius: "50%", background: "var(--sunk)", color: "var(--text)", fontWeight: 600 }}>
         {initial}
       </button>
       {open && (
-        <div className="pop" role="menu" style={{ right: 0, top: "calc(100% + 6px)", width: 280 }}>
+        <div className="pop" role="group" aria-label="Account" style={{ right: 0, top: "calc(100% + 6px)", width: 280 }}>
           <div className="group" style={{ fontSize: 13 }}>
             <div style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis" }}>{user.email}</div>
           </div>
@@ -34,13 +34,13 @@ export function UserMenu() {
               <span className={`pill ${c.status === "valid" ? "ok" : "bad"}`}>{c.status === "valid" ? `••••${c.last4}` : "invalid"}</span>
             </div>
           ))}
-          <button className="opt" role="menuitem" onClick={() => { setOpen(false); void openKeys(); }}>
+          <button className="opt" onClick={() => { setOpen(false); void openKeys(); }}>
             <Icon name="key" /> Manage model keys
           </button>
-          <a className="opt" role="menuitem" href="/prototype.html" target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
+          <a className="opt" href="/prototype.html" target="_blank" rel="noreferrer" style={{ textDecoration: "none" }}>
             <Icon name="sparkle" /> Product design tour
           </a>
-          <button className="opt" role="menuitem" onClick={() => void signOut()}>
+          <button className="opt" onClick={() => void signOut()}>
             <Icon name="logout" /> Sign out
           </button>
         </div>

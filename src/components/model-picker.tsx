@@ -45,14 +45,14 @@ export function ModelPicker({ align = "left", compact = false }: { align?: "left
 
   return (
     <div className="menu-wrap" ref={ref} style={{ position: "relative" }}>
-      <button type="button" className="chip" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+      <button type="button" className="chip" aria-expanded={open} aria-label={`Model: ${label}`} onClick={() => setOpen((o) => !o)}>
         <Icon name="sparkle" size={14} />
         {!compact && active && <span className="faint">{PROVIDERS[active.provider].label} ·</span>}
         {label}
         <Icon name="chev" size={14} />
       </button>
       {open && (
-        <div className="pop" role="menu" style={{ [align === "left" ? "left" : "right"]: 0, top: "auto", bottom: "calc(100% + 6px)", width: 320 } as React.CSSProperties} data-placement="up">
+        <div className="pop picker" role="group" aria-label="Choose a model" style={{ [align === "left" ? "left" : "right"]: 0, top: "auto", bottom: "calc(100% + 6px)", width: 320 } as React.CSSProperties} data-placement="up">
           {selectableProviders().map((pid) => {
             const cred = credentials.find((c) => c.provider === pid && c.status === "valid");
             const p = PROVIDERS[pid];
@@ -67,8 +67,7 @@ export function ModelPicker({ align = "left", compact = false }: { align?: "left
                     <button
                       key={m.id}
                       type="button"
-                      role="menuitemradio"
-                      aria-checked={active?.provider === pid && active.model === m.id}
+                      aria-pressed={active?.provider === pid && active.model === m.id}
                       className="opt"
                       onClick={async () => {
                         setOpen(false);

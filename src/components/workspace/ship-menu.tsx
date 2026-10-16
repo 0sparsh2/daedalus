@@ -56,11 +56,11 @@ export function ShipMenu({ projectId, disabled, initialRepo, initialDeployUrl }:
 
   return (
     <div className="menu-wrap" ref={ref}>
-      <button className="btn primary" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+      <button className="btn primary" aria-expanded={open} aria-label="Ship: deploy or push to GitHub" onClick={() => setOpen((o) => !o)}>
         <Icon name="rocket" /> <span className="hide-sm">Ship</span>
       </button>
       {open && (
-        <div className="pop" role="menu" style={{ width: 340, padding: 12, display: "grid", gap: 12 }}>
+        <div className="pop" role="group" aria-label="Ship" style={{ width: "min(340px, calc(100vw - 32px))", padding: 12, display: "grid", gap: 12 }}>
           <div style={{ display: "grid", gap: 6 }}>
             <div className="label">Deploy</div>
             <p className="muted" style={{ margin: 0, fontSize: 13 }}>

@@ -40,12 +40,12 @@ export function VersionsMenu({ projectId, checkpoints, disabled, onRestored }: {
 
   return (
     <div className="menu-wrap" ref={ref}>
-      <button className="btn ghost" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)} title="Versions">
+      <button className="btn ghost" aria-expanded={open} aria-label={`Versions (${checkpoints.length})`} onClick={() => setOpen((o) => !o)} title="Versions">
         <Icon name="history" /> <span className="hide-sm">Versions</span>
         {checkpoints.length > 0 && <span className="pill">{checkpoints.length}</span>}
       </button>
       {open && (
-        <div className="pop" role="menu" style={{ width: 360 }}>
+        <div className="pop" role="group" aria-label="Saved versions" style={{ width: "min(360px, calc(100vw - 32px))" }}>
           <div className="group label">Saved versions</div>
           {checkpoints.length === 0 && <div className="lockrow">Each run that changes your app saves a version here.</div>}
           <div className="versions">

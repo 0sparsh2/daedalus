@@ -144,7 +144,7 @@ export function HomeClient({ projects }: { projects: ProjectCard[] }) {
                   <span className="muted" style={{ fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {p.description ?? "No description"}
                   </span>
-                  <span className="faint" style={{ fontSize: 12 }}>
+                  <span className="faint" style={{ fontSize: 12 }} suppressHydrationWarning>
                     {p.status === "building" ? "Building…" : "Edited"} {timeAgo(p.updated_at)}
                   </span>
                 </a>

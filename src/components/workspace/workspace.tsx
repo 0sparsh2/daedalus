@@ -220,6 +220,7 @@ export function Workspace({
 
   return (
     <div className="ws">
+      <h1 className="sr-only">{name} · Daedalus workspace</h1>
       <header className="topbar">
         <Brand href="/" />
         <span className="faint hide-sm" aria-hidden="true">/</span>

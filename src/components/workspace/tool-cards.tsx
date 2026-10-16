@@ -240,7 +240,7 @@ export function PlanCard({ part, canBuild, onStartBuild, onRequestChanges }: { p
   return (
     <section className="plan-card" aria-label="Proposed plan">
       <div className="label">Plan ready</div>
-      <h3>{p.title}</h3>
+      <h2 className="plan-title">{p.title}</h2>
       {p.summary && <p style={{ margin: 0 }}>{p.summary}</p>}
       {p.features?.length ? (
         <div>
