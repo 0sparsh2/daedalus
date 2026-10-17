@@ -4,9 +4,10 @@ import { Icon } from "@/components/icons";
 import { ApiError, api } from "@/lib/client/api";
 import { describeRule, type Rule, type RulePreset } from "@/lib/rules";
 
-type Section = "connections" | "skills" | "rules" | "memory";
+type Section = "kits" | "connections" | "skills" | "rules" | "memory";
 
 const SECTIONS: Array<[Section, string]> = [
+  ["kits", "Kits"],
   ["connections", "Connections"],
   ["skills", "Skills"],
   ["rules", "Rules that always run"],
@@ -28,6 +29,7 @@ export function CustomizePanel({ projectId, hasSandbox, refreshKey }: { projectI
           </button>
         ))}
       </div>
+      {section === "kits" && <KitsSection projectId={projectId} onOpen={setSection} />}
       {section === "connections" && <ConnectionsSection projectId={projectId} />}
       {section === "skills" && <SkillsSection projectId={projectId} hasSandbox={hasSandbox} refreshKey={refreshKey} />}
       {section === "rules" && <RulesSection projectId={projectId} />}
@@ -663,6 +665,64 @@ function MemorySection({ projectId, refreshKey }: { projectId: string; refreshKe
         </div>
       </section>
     </>
+  );
+}
+
+function KitsSection({ projectId, onOpen }: { projectId: string; onOpen(s: Section): void }) {
+  const [kits, setKits] = useState<Array<{ id: string; name: string; description: string; contents: string; installed: boolean }> | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const [reload, setReload] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    api<{ kits: Array<{ id: string; name: string; description: string; contents: string; installed: boolean }> }>(`/api/projects/${projectId}/kits`)
+      .then((r) => !cancelled && setKits(r.kits))
+      .catch(() => !cancelled && setKits([]));
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, reload]);
+
+  async function install(id: string, name: string) {
+    setBusy(id);
+    setNote(null);
+    try {
+      const r = await api<{ installed: string[] }>(`/api/projects/${projectId}/kits`, { method: "POST", json: { id } });
+      setNote(`${name} installed${r.installed.length ? `: ${r.installed.join(", ")}` : ""}.`);
+      setReload((n) => n + 1);
+    } catch (e) {
+      setNote(e instanceof ApiError ? e.message : "Couldn't install the kit");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  if (!kits) return <span className="spin" />;
+  return (
+    <section aria-labelledby="kits-h" className="agents-sec">
+      <h2 id="kits-h" className="label">Kits</h2>
+      <p className="muted" style={{ margin: 0, fontSize: 14 }}>
+        One install that adds connections, skills and rules together. Each part shows up in its own section afterwards, where you can change or remove it.
+      </p>
+      <div className="agent-cards">
+        {kits.map((k) => (
+          <article key={k.id} className="agent-card">
+            <b>{k.name}</b>
+            <span className="muted" style={{ fontSize: 13.5 }}>{k.description}</span>
+            <span className="hint mono">{k.contents}</span>
+            {k.installed ? (
+              <span className="muted" style={{ fontSize: 13 }}>Installed</span>
+            ) : (
+              <button className="btn sm" style={{ justifySelf: "start" }} disabled={busy === k.id} onClick={() => void install(k.id, k.name)}>
+                {busy === k.id && <span className="spin" />} Install
+              </button>
+            )}
+          </article>
+        ))}
+      </div>
+      {note && <p className="hint" role="status" style={{ margin: 0 }}>{note} <button className="btn sm ghost" onClick={() => onOpen("connections")}>See connections</button></p>}
+    </section>
   );
 }
 

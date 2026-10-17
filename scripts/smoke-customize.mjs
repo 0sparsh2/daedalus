@@ -133,5 +133,13 @@ mems = await call("GET", `/api/projects/${pid}/memories`);
 check("forgotten memory is gone", !mems.body?.memories?.some((m) => m.id === rem?.output?.memoryId));
 await call("PUT", "/api/me/instructions", { instructions: "" });
 
+// Kits
+const careful = await call("POST", `/api/projects/${pid}/kits`, { id: "careful" });
+check("kit installs its rules", careful.status === 200 && (await call("GET", `/api/projects/${pid}/rules`)).body?.rules?.some((r) => r.label === "No recursive deletes"));
+const docs = await call("POST", `/api/projects/${pid}/kits`, { id: "docs-research" });
+check("kit installs its skill and skips connections that exist", docs.status === 200 && docs.body?.installed?.join(",") === "1 skill", JSON.stringify(docs.body?.installed));
+check("kit's skill is in the repo", (await call("GET", `/api/projects/${pid}/skills`)).body?.project?.some((s) => s.name === "docs-first"));
+check("kits show as installed", (await call("GET", `/api/projects/${pid}/kits`)).body?.kits?.filter((k) => k.installed).length === 2);
+
 console.log(failed ? `${failed} failed` : "all passed");
 process.exit(failed ? 1 : 0);
