@@ -2,6 +2,7 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Icon, type IconName } from "@/components/icons";
+import { normalizePlan } from "@/lib/plan";
 
 export interface ToolPart {
   type: string;
@@ -243,15 +244,9 @@ export function SubagentCard({ part, live, onOpenTrace }: { part: ToolPart; live
 }
 
 export function PlanCard({ part, canBuild, onStartBuild, onRequestChanges }: { part: ToolPart; canBuild: boolean; onStartBuild(): void; onRequestChanges(): void }) {
-  const p = (part.input ?? {}) as {
-    title?: string;
-    summary?: string;
-    features?: string[];
-    design?: string;
-    steps?: string[];
-    assumptions?: string[];
-    questions?: string[];
-  };
+  // A call the model got wrong is retried right after; its raw input isn't a plan.
+  if (part.state === "output-error" || part.state === "input-error") return null;
+  const p = normalizePlan(part.input);
   if (!isDone(part) && !p.title) {
     return (
       <div className="status-line">
@@ -264,7 +259,7 @@ export function PlanCard({ part, canBuild, onStartBuild, onRequestChanges }: { p
       <div className="label">Plan ready</div>
       <h2 className="plan-title">{p.title}</h2>
       {p.summary && <p style={{ margin: 0 }}>{p.summary}</p>}
-      {p.features?.length ? (
+      {p.features.length ? (
         <div>
           <div className="label" style={{ marginBottom: 4 }}>What you&apos;ll get</div>
           <ul>{p.features.map((f, i) => <li key={i}>{f}</li>)}</ul>
@@ -276,14 +271,14 @@ export function PlanCard({ part, canBuild, onStartBuild, onRequestChanges }: { p
           <p style={{ margin: 0, fontSize: 14 }}>{p.design}</p>
         </div>
       )}
-      {p.steps?.length ? (
+      {p.steps.length ? (
         <div>
           <div className="label" style={{ marginBottom: 4 }}>How I&apos;ll build it</div>
           <ol>{p.steps.map((s, i) => <li key={i}>{s}</li>)}</ol>
         </div>
       ) : null}
-      {p.assumptions?.length ? <p className="muted" style={{ margin: 0, fontSize: 13 }}>Assumptions: {p.assumptions.join("; ")}</p> : null}
-      {p.questions?.length ? (
+      {p.assumptions.length ? <p className="muted" style={{ margin: 0, fontSize: 13 }}>Assumptions: {p.assumptions.join("; ")}</p> : null}
+      {p.questions.length ? (
         <div className="banner info">
           <Icon name="info" />
           <div>

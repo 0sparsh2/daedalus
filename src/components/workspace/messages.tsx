@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Icon } from "@/components/icons";
+import { PartBoundary } from "./part-boundary";
 import { CheckLine, CheckpointLine, PlanCard, SubagentCard, ToolCard, ExploreGroup, type ToolPart, type SubagentData } from "./tool-cards";
 
 type Part = UIMessage["parts"][number] & { type: string; [key: string]: unknown };
@@ -112,6 +113,49 @@ function AssistantMessage({
 
   const busyTool = live && parts.length > 0 && parts[parts.length - 1].type.startsWith("tool-") && (parts[parts.length - 1] as { state?: string }).state !== "output-available" && (parts[parts.length - 1] as { state?: string }).state !== "output-error";
 
+  const renderBlock = (b: (typeof blocks)[number]) => {
+    if (b.kind === "explore") return <ExploreGroup key={b.key} parts={b.parts} />;
+    const p = b.part;
+    if (p.type === "text") {
+      return (
+        <div key={b.key} className="prose">
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{String(p.text ?? "")}</ReactMarkdown>
+        </div>
+      );
+    }
+    if (p.type === "reasoning") {
+      const text = String(p.text ?? "").trim();
+      if (!text) return null;
+      return (
+        <details key={b.key} className="thinking">
+          <summary>
+            <Icon name="sparkle" size={13} /> Thinking
+          </summary>
+          <div className="think-body">{text}</div>
+        </details>
+      );
+    }
+    if (p.type === "tool-propose_plan") {
+      return <PlanCard key={b.key} part={p as unknown as ToolPart} canBuild={isLatest && !live} onStartBuild={onStartBuild} onRequestChanges={onRequestChanges} />;
+    }
+    if (p.type === "tool-research" || p.type === "tool-explore") {
+      const tp = p as unknown as ToolPart;
+      return <SubagentCard key={b.key} part={tp} live={subagents.get(tp.toolCallId)} onOpenTrace={() => onOpenTrace(runId)} />;
+    }
+    if (p.type.startsWith("tool-")) return <ToolCard key={b.key} part={p as unknown as ToolPart} />;
+    if (p.type === "data-check") return <CheckLine key={b.key} data={p.data as never} />;
+    if (p.type === "data-checkpoint") return <CheckpointLine key={b.key} data={p.data as never} />;
+    if (p.type === "data-run-end") {
+      const d = p.data as { outcome: string; note: string };
+      return (
+        <div key={b.key} className={`banner ${d.outcome === "cancelled" ? "info" : "error"}`}>
+          <Icon name={d.outcome === "cancelled" ? "info" : "alert"} /> {d.note}
+        </div>
+      );
+    }
+    return null;
+  };
+
   return (
     <div className="msg-ai">
       <div className="who">
@@ -127,48 +171,9 @@ function AssistantMessage({
           <span className="spin" /> {status.note}…
         </div>
       )}
-      {blocks.map((b) => {
-        if (b.kind === "explore") return <ExploreGroup key={b.key} parts={b.parts} />;
-        const p = b.part;
-        if (p.type === "text") {
-          return (
-            <div key={b.key} className="prose">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{String(p.text ?? "")}</ReactMarkdown>
-            </div>
-          );
-        }
-        if (p.type === "reasoning") {
-          const text = String(p.text ?? "").trim();
-          if (!text) return null;
-          return (
-            <details key={b.key} className="thinking">
-              <summary>
-                <Icon name="sparkle" size={13} /> Thinking
-              </summary>
-              <div className="think-body">{text}</div>
-            </details>
-          );
-        }
-        if (p.type === "tool-propose_plan") {
-          return <PlanCard key={b.key} part={p as unknown as ToolPart} canBuild={isLatest && !live} onStartBuild={onStartBuild} onRequestChanges={onRequestChanges} />;
-        }
-        if (p.type === "tool-research" || p.type === "tool-explore") {
-          const tp = p as unknown as ToolPart;
-          return <SubagentCard key={b.key} part={tp} live={subagents.get(tp.toolCallId)} onOpenTrace={() => onOpenTrace(runId)} />;
-        }
-        if (p.type.startsWith("tool-")) return <ToolCard key={b.key} part={p as unknown as ToolPart} />;
-        if (p.type === "data-check") return <CheckLine key={b.key} data={p.data as never} />;
-        if (p.type === "data-checkpoint") return <CheckpointLine key={b.key} data={p.data as never} />;
-        if (p.type === "data-run-end") {
-          const d = p.data as { outcome: string; note: string };
-          return (
-            <div key={b.key} className={`banner ${d.outcome === "cancelled" ? "info" : "error"}`}>
-              <Icon name={d.outcome === "cancelled" ? "info" : "alert"} /> {d.note}
-            </div>
-          );
-        }
-        return null;
-      })}
+      {blocks.map((b) => (
+        <PartBoundary key={b.key}>{renderBlock(b)}</PartBoundary>
+      ))}
       {live && (busyTool || parts.length === 0 || parts[parts.length - 1]?.type === "step-start" || parts[parts.length - 1]?.type?.startsWith("data-")) && (
         <div className="status-line" role="status" aria-live="polite">
           <span className="spin" /> Working…

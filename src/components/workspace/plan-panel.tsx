@@ -9,7 +9,7 @@ export function PlanPanel({ messages, onStartBuild, running }: { messages: UIMes
   let todos: Array<{ content: string; status: string }> = [];
   for (const m of messages) {
     for (const p of m.parts as unknown as ToolPart[]) {
-      if (p.type === "tool-propose_plan" && p.input) plan = p;
+      if (p.type === "tool-propose_plan" && p.input && p.state !== "output-error" && p.state !== "input-error") plan = p;
       if (p.type === "tool-update_todos" && Array.isArray(p.input?.todos)) todos = p.input.todos as typeof todos;
     }
   }
