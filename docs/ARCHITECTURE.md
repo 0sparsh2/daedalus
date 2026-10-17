@@ -120,7 +120,8 @@ sequenceDiagram
   API->>DB: Insert user message + run (queued)
   API->>WF: start(agentRun, scope + run token)
   API-->>UI: SSE stream + x-workflow-run-id
-  WF->>SB: startRunStep: getOrCreate microVM, starter app, git, dev server
+  WF->>GW: routeTurnStep: rules, or one fast-model call → chat | ask | plan | build
+  WF->>SB: startRunStep (not for chat): getOrCreate microVM, starter app, git, dev server
   SB-->>UI: preview URL (data-preview chunk) → iframe loads
   loop Agent loop (each call is a durable step)
     WF->>GW: model call (Authorization: run token)
@@ -143,11 +144,12 @@ sequenceDiagram
 1. **Send opens the gate.** The composer works signed out. Pressing Send saves the idea (it survives an OAuth redirect) and calls `ensureReady()` (`src/lib/client/session.tsx`), which opens the sign-in dialog. After sign-in, the same dialog asks for a provider, a model and the user's API key (`src/components/auth-dialog.tsx`).
 2. **The key is checked and locked away.** `POST /api/credentials` validates the key against the provider (a free models-list call, or a 1-token completion for NIM), then stores it encrypted with AES-256-GCM, using the user id as authenticated data so a ciphertext can't be moved between users (`src/lib/crypto.ts`). The browser only ever sees the provider name and last four characters.
 3. **A project and a run are created.** The home page creates the project and opens the workspace, which sends the first message. `POST /api/chat` (`src/app/api/chat/route.ts`) checks the user holds a key for the chosen provider, refuses a second concurrent run on the same project, persists the user message, inserts a `runs` row, mints a run token, and starts the durable workflow `agentRun` (`src/workflows/agent-run.ts`). The response is the run's live stream plus an `x-workflow-run-id` header for reconnects.
-4. **The sandbox comes up.** The first workflow step (`startRunStep` in `src/lib/agent/run-steps.ts`) calls `ensureProjectSandbox()` (`src/lib/sandbox/index.ts`). That function creates or resumes the project's named microVM, lays down the starter app (Vite 8, React 19, Tailwind 4, TypeScript), installs dependencies, initialises git and starts the dev server. Every stage is idempotent, so a retried step just continues. The preview URL streams to the browser as a `data-preview` chunk and the iframe loads it. The step also reads the file tree, `AGENTS.md` and recent commits into the system prompt.
-5. **The agent works.** `WorkflowAgent` runs the loop. Each model call goes through the gateway with the run token. Each tool call (`write_file`, `edit_file`, `run_command`, `verify`, `check_preview`, `research`, …) is a durable step that attaches to the sandbox and records a trace span. Vite hot-reloads the preview as files change, so the user watches the UI being built. Text, reasoning, tool cards, the task list and sub-agent progress all stream into the chat.
-6. **The harness checks the work.** When the model says it's done, `finalCheckStep` runs `tsc`, a production build, and a headless probe of every module the browser would load. If anything fails, the report goes back to the agent as a new message and it gets another round (up to three). The user sees "Automatic check found 2 problems; Daedalus is fixing them."
-7. **The version is saved.** `finishRunStep` commits the sandbox's git repo (a restorable checkpoint), persists the assistant message, ends the run and its spans, and closes the stream. The UI refreshes the version list, code and trace.
-8. **Ship.** From the Ship menu the user can push to GitHub (section 8) or deploy to a public URL (section 9).
+4. **The turn is routed.** The first workflow step (`routeTurnStep`) decides whether the message is chat, a question about the app, a plan or a build, from the user's action, simple rules or one fast-model call (see "The turn router" below). Chat turns skip the sandbox and answer straight away.
+5. **The sandbox comes up.** The next workflow step (`startRunStep` in `src/lib/agent/run-steps.ts`) calls `ensureProjectSandbox()` (`src/lib/sandbox/index.ts`). That function creates or resumes the project's named microVM, lays down the starter app (Vite 8, React 19, Tailwind 4, TypeScript), installs dependencies, initialises git and starts the dev server. Every stage is idempotent, so a retried step just continues. The preview URL streams to the browser as a `data-preview` chunk and the iframe loads it. The step also reads the file tree, `AGENTS.md` and recent commits into the system prompt.
+6. **The agent works.** `WorkflowAgent` runs the loop. Each model call goes through the gateway with the run token. Each tool call (`write_file`, `edit_file`, `run_command`, `verify`, `check_preview`, `research`, …) is a durable step that attaches to the sandbox and records a trace span. Vite hot-reloads the preview as files change, so the user watches the UI being built. Text, reasoning, tool cards, the task list and sub-agent progress all stream into the chat.
+7. **The harness checks the work.** When the model says it's done, `finalCheckStep` runs `tsc`, a production build, and a headless probe of every module the browser would load. If anything fails, the report goes back to the agent as a new message and it gets another round (up to three). The user sees "Automatic check found 2 problems; Daedalus is fixing them."
+8. **The version is saved.** `finishRunStep` commits the sandbox's git repo (a restorable checkpoint), persists the assistant message, ends the run and its spans, and closes the stream. The UI refreshes the version list, code and trace.
+9. **Ship.** From the Ship menu the user can push to GitHub (section 8) or deploy to a public URL (section 9).
 
 ---
 
@@ -228,12 +230,41 @@ agentRun(scope, history)            ── one workflow run per user turn
 
 **Why durable.** On Vercel Hobby a function lives at most 5 minutes, and a real build with an open model takes 5–15. Making every model and tool call a separate queued step means no single invocation runs long, the run resumes after a crash or redeploy, transient failures retry automatically, and the browser can drop and reconnect without losing anything. We hit one serialization pitfall: the stock OpenAI-compatible and DeepSeek clients lose their URL builder when serialized between steps. We fixed it with our own `GatewayModel` (section 5).
 
-### Modes
+### The turn router: every message goes to the right agent
 
-- **Plan first** (read-only): tools are `list_files`, `read_file`, `glob`, `grep`, `research`, `explore` and `propose_plan`. The run ends when the plan is proposed. The UI renders it as a card with **Start building** (`PlanCard`).
-- **Build**: the full tool set plus `update_todos`, a task list the agent keeps current; the UI shows it live and in the Plan tab.
+Saying "Hi" in Plan mode used to force the planner to produce a plan, because a plan-mode run had to end in `propose_plan`. It invented a placeholder ("Hi App"). Every message also paid for a sandbox and a 20-tool prompt. Now each turn is routed first (`src/lib/agent/router.ts`, `route-step.ts`).
 
-Read-only enforcement is double: plan mode only *exposes* read tools (`activeTools`), and the write steps also refuse when `scope.mode === "plan"`.
+| Layer | Decides | Cost |
+| --- | --- | --- |
+| Actions | What the user clicked: **Start building** → build; answering a question card → continue the current mode | Free |
+| Rules | Greetings, thanks and acknowledgements → chat; scripted test turns | Free |
+| Classifier | Everything else: one call to the project's fast sub-agent model (gpt-oss-20b on NIM), JSON out, 12 s cap, low reasoning effort | ~0.6–2 s |
+| Fallback | Anything unclear → the user's mode | Free |
+
+Each route is an **agent profile**: a prompt, a tool set, a step budget and a stop condition. Every profile can simply reply, and none is forced to end with a tool call.
+
+| Route | Agent | Sandbox | Tools | Ends with |
+| --- | --- | --- | --- | --- |
+| `chat` | Converse | No (context from the database) | None | A reply |
+| `ask` | Answer about the app | Yes | Read-only, plus research, explore and ask_user | A reply, or questions |
+| `plan` | Planner | Yes | Read-only, plus research, explore, ask_user and propose_plan | A plan, questions or a reply |
+| `build` | Builder | Yes | Everything | A reply after the automatic check passes, or questions |
+
+**The Plan/Build toggle is a ceiling, not a script.** Plan allows chat, ask and plan; Build allows chat, ask and build. Only `build` turns can change files: write tools refuse on any other route even if a model calls them, and the automatic check and version checkpoint run only for build turns.
+
+**Questions are a tool.** `ask_user` takes up to four questions with suggested answers (recommended first). The UI renders them as a card with answer buttons and a free-text field. Unlike OpenCode's `question` tool or Claude Code's `AskUserQuestion`, which block until answered, ours ends the turn: the answer arrives as the next message with the `answer` action, so a durable run never waits on a person.
+
+**Observability.** The decision is a "Router" span in the trace, with the classifier's own model call nested under it. It's stored on the run (`runs.route`) and on the message's metadata, and shown as a chip on each reply ("Chat · no changes", "Answer · read-only", "Planning · read-only", "Building", with the reason on hover). The Agents tab counts turns per route and how many the free rules decided.
+
+**Measured.** With Nemotron 3 Super as the agent and gpt-oss-20b as the router, all seven cases in `scripts/smoke-route.mjs --real` are routed correctly. Before the router prompt had examples it got five of seven: "What can you build?" went to plan and "How does Daedalus save my work?" went to ask. "Hi" now answers in about 3 seconds with no sandbox; a vague "Make me an app" in Plan mode gets three questions instead of a placeholder plan, and answering them produces a real one.
+
+**What we took from other harnesses** (read in their source and docs):
+
+- *OpenCode* (`packages/core/src/plugin/plan.ts`, `plugin/agent.ts`): agents are profiles of prompt, permissions and model. Plan is "Discuss the plan with the user directly in the conversation" plus denied edits; there is no forced ending. Hidden `title` and `summary` agents use a small model for side jobs. Mode switches are injected as reminders near the tail of the context so the cached prefix stays warm. When the step limit is hit, tools are disabled and the model must summarise.
+- *Claude Code* (public docs and the `anthropics/claude-code` plugins): plan mode is a permission mode, and the model ends a plan with ExitPlanMode for approval. `AskUserQuestion` gathers requirements. Sub-agents are markdown profiles with their own tools and model. A small model handles background requests, and a classifier model reviews actions in auto mode. The `feature-dev` workflow puts clarifying questions before design.
+- *Codex, Cline, Roo Code, Aider and Lovable*: read-only ask/plan modes beside a code mode, `plan_mode_respond` / `ask_followup_question` tools (Cline), mode-switch requests (Roo), and per-message `/ask` versus `/code` (Aider). They reach the same conclusion: conversation and questions are first-class, and modes are permissions.
+
+The last step of any run now also has its tools switched off, with a note asking for a summary (OpenCode's max-steps behaviour), so a long build always ends with a report rather than mid-action.
 
 ### Tools
 
@@ -251,7 +282,8 @@ Read-only enforcement is double: plan mode only *exposes* read tools (`activeToo
 | `update_todos` | The agent's visible task list | |
 | `research` | Sub-agent with web search and fetch (plus read access to the project) | Own context; SSRF-guarded fetch; 12-step cap, the last step without tools so it always writes an answer |
 | `explore` | Read-only sub-agent that maps a codebase | Own context; 16-step cap |
-| `propose_plan` | Plan mode's final answer, rendered as a plan card | Plan mode only |
+| `ask_user` | Up to four questions with suggested answers, rendered as an answer card; ends the turn | Any route but chat |
+| `propose_plan` | A complete plan for approval, rendered as a plan card with **Start building** | Plan route only; never with placeholder content |
 
 **Editing.** Models routinely misquote code, so `edit_file` (`src/lib/agent/edit.ts`, unit-tested) tries four tiers in order:
 
