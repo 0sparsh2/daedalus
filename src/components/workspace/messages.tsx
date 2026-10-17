@@ -5,7 +5,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Icon } from "@/components/icons";
 import { PartBoundary } from "./part-boundary";
-import { CheckLine, CheckpointLine, PlanCard, QuestionsCard, RouteChip, SubagentCard, ToolCard, ExploreGroup, type ToolPart, type SubagentData } from "./tool-cards";
+import { CheckLine, CheckpointLine, MemoryCard, PlanCard, QuestionsCard, RouteChip, SubagentCard, ToolCard, ExploreGroup, type ToolPart, type SubagentData } from "./tool-cards";
 
 type Part = UIMessage["parts"][number] & { type: string; [key: string]: unknown };
 
@@ -16,6 +16,8 @@ export function Messages({
   status,
   onStartBuild,
   onAnswer,
+  memoryStatus,
+  onMemoryDecision,
   onRequestChanges,
   onOpenTrace,
 }: {
@@ -23,6 +25,8 @@ export function Messages({
   status: string;
   onStartBuild(): void;
   onAnswer(text: string): void;
+  memoryStatus: Record<string, string>;
+  onMemoryDecision(id: string, status: "kept" | "dismissed"): void;
   onRequestChanges(): void;
   onOpenTrace(runId?: string): void;
 }) {
@@ -67,6 +71,8 @@ export function Messages({
             onStartBuild={onStartBuild}
             onRequestChanges={onRequestChanges}
             onAnswer={onAnswer}
+            memoryStatus={memoryStatus}
+            onMemoryDecision={onMemoryDecision}
             onOpenTrace={onOpenTrace}
             isLatest={i === messages.length - 1}
           />
@@ -88,6 +94,8 @@ function AssistantMessage({
   isLatest,
   onStartBuild,
   onAnswer,
+  memoryStatus,
+  onMemoryDecision,
   onRequestChanges,
   onOpenTrace,
 }: {
@@ -96,6 +104,8 @@ function AssistantMessage({
   isLatest: boolean;
   onStartBuild(): void;
   onAnswer(text: string): void;
+  memoryStatus: Record<string, string>;
+  onMemoryDecision(id: string, status: "kept" | "dismissed"): void;
   onRequestChanges(): void;
   onOpenTrace(runId?: string): void;
 }) {
@@ -140,6 +150,11 @@ function AssistantMessage({
           <div className="think-body">{text}</div>
         </details>
       );
+    }
+    if (p.type === "tool-remember") {
+      const tp = p as unknown as ToolPart;
+      const memId = (tp.output as { memoryId?: string } | undefined)?.memoryId;
+      return <MemoryCard key={b.key} part={tp} status={memId ? memoryStatus[memId] : undefined} onDecide={onMemoryDecision} />;
     }
     if (p.type === "tool-ask_user") {
       return <QuestionsCard key={b.key} part={p as unknown as ToolPart} canAnswer={isLatest && !live} onAnswer={onAnswer} />;

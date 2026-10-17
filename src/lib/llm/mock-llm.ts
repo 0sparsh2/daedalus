@@ -110,6 +110,11 @@ export const MOCK_SCENARIOS: Record<string, MockTurn[]> = {
     { text: "Reading the repository's wiki.", toolCalls: [{ name: "mcp__deepwiki__read_wiki_structure", args: { repoName: "vercel/ai" } }] },
     { text: "Got it." },
   ],
+  // Memory: the agent proposes a fact; the user keeps or discards it.
+  remember: [
+    { text: "Noting that for next time.", toolCalls: [{ name: "remember", args: { text: "Use metric units throughout", scope: "project" } }] },
+    { text: "Noted." },
+  ],
   "research-sub": [
     { text: "Reading package.json.", toolCalls: [{ name: "read_file", args: { path: "package.json" } }] },
     { text: "The project uses React 19.3.1 with Vite 8.\n\nSources: package.json" },
@@ -158,6 +163,13 @@ export function pickTurn(messages: ChatMessage[], toolNames: string[]): MockTurn
       tagged = i;
     }
   });
+  // Test-only: reply with the instructions and memory sections of the system prompt, to prove
+  // they reach the model.
+  if (scenario === "memory-echo") {
+    const system = textOf(messages.find((m) => m.role === "system")?.content);
+    const section = (title: string) => system.split(`# ${title}`)[1]?.split("\n# ")[0]?.trim() ?? "(missing)";
+    return { text: `INSTRUCTIONS: ${section("The user's instructions (for all their projects)")}\nMEMORY: ${section("What the user asked you to remember")}` };
+  }
   const script = scenario ? MOCK_SCENARIOS[scenario] : undefined;
   if (script) {
     // Harness-injected messages (automatic checks) don't restart the script.

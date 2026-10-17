@@ -2,6 +2,7 @@ import "server-only";
 import { requestPreviewReload } from "../emit";
 import { runSubagent } from "../subagents";
 import { callConnectionTool } from "@/lib/mcp/connections";
+import { proposeMemory } from "@/lib/memory/memory";
 import { runTool, stableId, ToolError, truncateMiddle } from "../runtime";
 import type { SandboxHandle } from "@/lib/sandbox";
 import { loadSkill } from "@/lib/skills/project";
@@ -156,6 +157,26 @@ export async function mcpToolStep(input: { connectionId: string; connection: str
 }
 // A connected service may have side effects; don't repeat a call that might have gone through.
 mcpToolStep.maxRetries = 1;
+
+/** Proposes a memory; the user keeps or discards it from the card in the chat. */
+export async function rememberStep(input: { text: string; scope?: "project" | "me" }, ctx: Ctx) {
+  "use step";
+  return runTool(
+    "remember",
+    input,
+    ctx,
+    async () => {
+      const r = await proposeMemory({ userId: ctx.scope.userId, projectId: ctx.scope.projectId, runId: ctx.scope.runId, text: input.text, scope: input.scope ?? "project" });
+      const text = r.duplicate
+        ? r.status === "kept"
+          ? "Already remembered; no need to propose it again."
+          : "Already proposed; the user hasn't decided yet."
+        : "Proposed to the user. It's used in future turns only if they keep it; carry on with the task.";
+      return { ok: true, text, memoryId: r.id, status: r.status };
+    },
+    { sandbox: false, kind: "system" },
+  );
+}
 
 export async function askUserStep(input: { questions: Array<{ question: string; options?: string[] }> }, ctx: Ctx) {
   "use step";

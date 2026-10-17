@@ -249,6 +249,7 @@ button.chip:hover:not(:disabled) { border-color: var(--muted); }
 .check-line.passed { background: var(--ok-soft); color: var(--ok); }
 .check-line.failed { background: var(--cost-soft); color: var(--cost); }
 .checkpoint-line { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); }
+.memory-card { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; border: 1px dashed var(--line-strong); border-radius: var(--r-2); padding: 8px 12px; font-size: 14px; background: var(--surface); }
 .subagent { border: 1px solid var(--line); border-left: 3px solid var(--needs); border-radius: var(--r-2); background: var(--surface); }
 .subagent .sa-h { display: flex; align-items: center; gap: 8px; padding: 8px 10px; font-size: 13.5px; }
 .subagent .sa-steps { list-style: none; margin: 0; padding: 0 10px 8px 30px; display: grid; gap: 3px; font-size: 12.5px; color: var(--muted); }

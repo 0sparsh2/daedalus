@@ -47,7 +47,7 @@ const PROFILES: Record<Route, { tools: ToolName[]; stopWhen: () => StopCondition
 };
 
 function promptFor(route: Route, c: PromptContext): string {
-  if (route === "chat") return chatPrompt({ projectName: c.projectName, state: c.state ?? "", today: c.today });
+  if (route === "chat") return chatPrompt({ projectName: c.projectName, state: c.state ?? "", today: c.today, userInstructions: c.userInstructions, memories: c.memories });
   if (route === "ask") return askPrompt(c);
   if (route === "plan") return planPrompt(c);
   return buildPrompt(c);

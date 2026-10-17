@@ -415,3 +415,32 @@ export function QuestionsCard({ part, canAnswer, onAnswer }: { part: ToolPart; c
   );
 }
 
+/** remember: a memory the agent proposes. It's used in later turns only if the user keeps it. */
+export function MemoryCard({ part, status, onDecide }: { part: ToolPart; status?: string; onDecide(id: string, status: "kept" | "dismissed"): void }) {
+  const input = (part.input ?? {}) as { text?: string; scope?: string };
+  const out = (part.output ?? {}) as { memoryId?: string; status?: string; ok?: boolean };
+  if (!input.text || part.state === "output-error" || part.state === "input-error") return null;
+  const current = status ?? out.status;
+  return (
+    <div className="memory-card" role="group" aria-label="Proposed memory">
+      <Icon name="history" size={14} />
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span className="muted" style={{ fontSize: 12.5 }}>{input.scope === "me" ? "Remember for all your projects?" : "Remember for this project?"}</span>
+        <span style={{ display: "block" }}>{input.text}</span>
+      </span>
+      {!out.memoryId ? (
+        <span className="spin" />
+      ) : current === "kept" ? (
+        <span className="muted" style={{ fontSize: 13 }}>Kept</span>
+      ) : current === "dismissed" ? (
+        <span className="muted" style={{ fontSize: 13 }}>Not kept</span>
+      ) : (
+        <span style={{ display: "inline-flex", gap: 6 }}>
+          <button className="btn sm primary" onClick={() => onDecide(out.memoryId!, "kept")}>Keep</button>
+          <button className="btn sm ghost" onClick={() => onDecide(out.memoryId!, "dismissed")}>Discard</button>
+        </span>
+      )}
+    </div>
+  );
+}
+

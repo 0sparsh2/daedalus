@@ -4,6 +4,7 @@ import { attachProjectSandbox, ensureProjectSandbox } from "@/lib/sandbox";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { endSpan, recordSpan, startSpan } from "@/lib/trace/spans";
 import { connectionTools } from "@/lib/mcp/connections";
+import { memoryContext } from "@/lib/memory/memory";
 import { skillsForRun } from "@/lib/skills/project";
 import { emit, requestPreviewReload } from "./emit";
 import { projectRules, runBeforeFinish } from "./rules-run";
@@ -50,7 +51,8 @@ export async function startRunStep(scope: RunScope, projectName: string): Promis
     const state = count
       ? `${count} saved version${count === 1 ? "" : "s"}; latest: ${versions?.map((v) => v.message).join("; ")}`
       : "nothing built yet: the project is the starter app";
-    return { projectName, fileTree: "", today: new Date().toISOString().slice(0, 10), state };
+    const mem = await memoryContext(scope.userId, scope.projectId).catch(() => ({ memories: [] as string[], instructions: undefined }));
+    return { projectName, fileTree: "", today: new Date().toISOString().slice(0, 10), state, userInstructions: mem.instructions, memories: mem.memories };
   }
 
   const sandboxSpan = stableId(scope.runId, "sandbox");
@@ -66,12 +68,13 @@ export async function startRunStep(scope: RunScope, projectName: string): Promis
 
   const { data: proj } = await db.from("projects").select("settings").eq("id", scope.projectId).maybeSingle();
   const disabledSkills = ((proj?.settings ?? {}) as { disabledSkills?: string[] }).disabledSkills ?? [];
-  const [tree, agents, log, skills, connections] = await Promise.all([
+  const [tree, agents, log, skills, connections, mem] = await Promise.all([
     impl.listFiles(handle, { depth: 4 }),
     handle.readFile("AGENTS.md"),
     handle.exec("git log --oneline -6 2>/dev/null || true", { timeoutMs: 15_000 }),
     skillsForRun(handle, disabledSkills),
     connectionTools(scope.projectId).catch(() => []),
+    memoryContext(scope.userId, scope.projectId).catch(() => ({ memories: [] as string[], instructions: undefined })),
   ]);
   return {
     projectName,
@@ -82,6 +85,8 @@ export async function startRunStep(scope: RunScope, projectName: string): Promis
     today: new Date().toISOString().slice(0, 10),
     skills,
     connections,
+    userInstructions: mem.instructions,
+    memories: mem.memories,
   };
 }
 

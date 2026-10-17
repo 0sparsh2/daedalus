@@ -26,6 +26,7 @@ async function turn(projectId, text, mode = "build") {
   const projId = res.headers.get("x-daedalus-project-id");
   const tools = [];
   const checks = [];
+  let said = "";
   const names = new Map();
   let buf = "";
   for await (const chunk of res.body) {
@@ -40,9 +41,10 @@ async function turn(projectId, text, mode = "build") {
       if (e.type === "tool-input-error" || e.type === "tool-output-error") tools.push({ name: e.toolName ?? names.get(e.toolCallId)?.name, error: e.errorText });
       if (e.type === "tool-output-available") tools.push({ ...names.get(e.toolCallId), output: e.output });
       if (e.type === "data-check" && e.data?.status !== "running") checks.push(e.data);
+      if (e.type === "text-delta") said += e.delta;
     }
   }
-  return { projectId: projId, tools, checks };
+  return { projectId: projId, tools, checks, said };
 }
 
 await call("POST", "/api/credentials", { provider: "mock", apiKey: "mock-key-for-tests", model: "mock-builder" });
@@ -108,6 +110,28 @@ check("tool that isn't read-only is unavailable while planning", Boolean(dwPlan?
 const built = await turn(pid, "[mock:mcp-build] Use the wiki");
 const dwBuild = built.tools.find((t) => t.name === "mcp__deepwiki__read_wiki_structure");
 check("every connection tool works while building", dwBuild?.output?.ok === true && dwBuild.output.text.length > 50, (dwBuild?.output?.text ?? dwBuild?.error ?? "").slice(0, 90));
+
+// Instructions & memory
+const instr = await call("PUT", "/api/me/instructions", { instructions: "Explain things simply." });
+check("your instructions saved", instr.status === 200 && (await call("GET", "/api/me/instructions")).body?.instructions === "Explain things simply.");
+const proposed = await turn(pid, "[mock:remember] Remember this");
+const rem = proposed.tools.find((t) => t.name === "remember");
+check("agent proposes a memory", rem?.output?.ok === true && rem.output.status === "proposed" && Boolean(rem.output.memoryId));
+let mems = await call("GET", `/api/projects/${pid}/memories`);
+check("proposed memory listed, not yet used", mems.body?.memories?.some((m) => m.id === rem?.output?.memoryId && m.status === "proposed"));
+const echoBefore = await turn(pid, "[mock:memory-echo] What do you know?", "plan");
+check("proposed memory isn't in the prompt", !echoBefore.said.includes("metric"), echoBefore.said.slice(0, 120));
+await call("PATCH", `/api/projects/${pid}/memories`, { id: rem?.output?.memoryId, status: "kept" });
+await call("POST", `/api/projects/${pid}/memories`, { text: "My team uses Linear", scope: "me" });
+const echo = await turn(pid, "[mock:memory-echo] What do you know now?", "plan");
+check("kept memories reach the prompt", echo.said.includes("Use metric units throughout") && echo.said.includes("My team uses Linear (applies to all projects)"), echo.said.slice(0, 160));
+check("your instructions reach the prompt", echo.said.includes("Explain things simply."));
+const again = await turn(pid, "[mock:remember] Remember it again");
+check("the same fact isn't proposed twice", /Already remembered/.test(again.tools.find((t) => t.name === "remember")?.output?.text ?? ""));
+await call("PATCH", `/api/projects/${pid}/memories`, { id: rem?.output?.memoryId, status: "dismissed" });
+mems = await call("GET", `/api/projects/${pid}/memories`);
+check("forgotten memory is gone", !mems.body?.memories?.some((m) => m.id === rem?.output?.memoryId));
+await call("PUT", "/api/me/instructions", { instructions: "" });
 
 console.log(failed ? `${failed} failed` : "all passed");
 process.exit(failed ? 1 : 0);

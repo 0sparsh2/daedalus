@@ -4,12 +4,13 @@ import { Icon } from "@/components/icons";
 import { ApiError, api } from "@/lib/client/api";
 import { describeRule, type Rule, type RulePreset } from "@/lib/rules";
 
-type Section = "connections" | "skills" | "rules";
+type Section = "connections" | "skills" | "rules" | "memory";
 
 const SECTIONS: Array<[Section, string]> = [
   ["connections", "Connections"],
   ["skills", "Skills"],
   ["rules", "Rules that always run"],
+  ["memory", "Instructions & memory"],
 ];
 
 /**
@@ -30,6 +31,7 @@ export function CustomizePanel({ projectId, hasSandbox, refreshKey }: { projectI
       {section === "connections" && <ConnectionsSection projectId={projectId} />}
       {section === "skills" && <SkillsSection projectId={projectId} hasSandbox={hasSandbox} refreshKey={refreshKey} />}
       {section === "rules" && <RulesSection projectId={projectId} />}
+      {section === "memory" && <MemorySection projectId={projectId} refreshKey={refreshKey} />}
     </div>
   );
 }
@@ -522,6 +524,142 @@ function ConnectionsSection({ projectId }: { projectId: string }) {
               {busy === "custom" && <span className="spin" />} Connect and list its tools
             </button>
           </div>
+        </div>
+      </section>
+    </>
+  );
+}
+
+interface Memory {
+  id: string;
+  project_id: string | null;
+  text: string;
+  source: "agent" | "user";
+  status: "proposed" | "kept" | "dismissed";
+}
+
+function MemorySection({ projectId, refreshKey }: { projectId: string; refreshKey: number }) {
+  const [instr, setInstr] = useState<{ value: string; saved: string } | null>(null);
+  const [memories, setMemories] = useState<Memory[] | null>(null);
+  const [draft, setDraft] = useState({ text: "", scope: "project" as "project" | "me" });
+  const [note, setNote] = useState<string | null>(null);
+  const [reload, setReload] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    api<{ instructions: string }>("/api/me/instructions")
+      .then((r) => !cancelled && setInstr({ value: r.instructions, saved: r.instructions }))
+      .catch(() => !cancelled && setInstr({ value: "", saved: "" }));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    api<{ memories: Memory[] }>(`/api/projects/${projectId}/memories`)
+      .then((r) => !cancelled && setMemories(r.memories))
+      .catch(() => !cancelled && setMemories([]));
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, refreshKey, reload]);
+
+  async function saveInstructions() {
+    if (!instr) return;
+    await api("/api/me/instructions", { method: "PUT", json: { instructions: instr.value } })
+      .then(() => {
+        setInstr({ value: instr.value, saved: instr.value });
+        setNote("Saved. Every project uses them from the next turn.");
+      })
+      .catch((e) => setNote(e instanceof ApiError ? e.message : "Couldn't save"));
+  }
+
+  async function decide(id: string, status: "kept" | "dismissed") {
+    setMemories((m) => m?.map((x) => (x.id === id ? { ...x, status } : x)) ?? m);
+    await api(`/api/projects/${projectId}/memories`, { method: "PATCH", json: { id, status } }).catch(() => setReload((n) => n + 1));
+    if (status === "dismissed") setReload((n) => n + 1);
+  }
+
+  async function add() {
+    await api(`/api/projects/${projectId}/memories`, { method: "POST", json: draft }).catch(() => {});
+    setDraft({ text: "", scope: draft.scope });
+    setReload((n) => n + 1);
+  }
+
+  const proposed = memories?.filter((m) => m.status === "proposed") ?? [];
+  const kept = memories?.filter((m) => m.status === "kept") ?? [];
+
+  return (
+    <>
+      <section aria-labelledby="me-instr-h" className="agents-sec">
+        <h2 id="me-instr-h" className="label">Your instructions (all projects)</h2>
+        <p className="muted" style={{ margin: 0, fontSize: 14 }}>
+          How Daedalus should work with you, in every project. This project&apos;s own instructions are its <span className="mono">AGENTS.md</span>, in the
+          Agents tab. Instructions are requests; for anything that must happen every time, add a rule.
+        </p>
+        {instr === null ? (
+          <span className="spin" />
+        ) : (
+          <>
+            <label className="sr-only" htmlFor="me-instructions">Your instructions</label>
+            <textarea id="me-instructions" className="input" style={{ minHeight: 120, maxWidth: 720 }} placeholder={"Explain things simply; I'm not a developer.\nUse British spelling.\nPrefer calm colours."} value={instr.value} onChange={(e) => { setInstr({ ...instr, value: e.target.value }); setNote(null); }} />
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <button className="btn primary" disabled={instr.value === instr.saved} onClick={() => void saveInstructions()}>Save instructions</button>
+              {note && <span className="hint" role="status">{note}</span>}
+            </div>
+          </>
+        )}
+      </section>
+
+      <section aria-labelledby="mem-h" className="agents-sec">
+        <h2 id="mem-h" className="label">Memory</h2>
+        <p className="muted" style={{ margin: 0, fontSize: 14 }}>
+          Things Daedalus learned while working with you. It only proposes them; nothing is used until you keep it.
+        </p>
+        {memories === null ? (
+          <span className="spin" />
+        ) : (
+          <div style={{ display: "grid", gap: 8, maxWidth: 820 }}>
+            {proposed.map((m) => (
+              <div key={m.id} className="memory-card">
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span className="muted" style={{ fontSize: 12.5 }}>Proposed{m.project_id ? "" : " · all projects"}</span>
+                  <span style={{ display: "block" }}>{m.text}</span>
+                </span>
+                <button className="btn sm primary" onClick={() => void decide(m.id, "kept")}>Keep</button>
+                <button className="btn sm ghost" onClick={() => void decide(m.id, "dismissed")}>Discard</button>
+              </div>
+            ))}
+            {kept.map((m) => (
+              <div key={m.id} className="agent-card" style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                <Icon name="history" size={15} />
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  {m.text}
+                  <span className="muted" style={{ display: "block", fontSize: 12.5 }}>
+                    {m.source === "agent" ? "Learned by Daedalus" : "Added by you"}
+                    {m.project_id ? " · this project" : " · all projects"}
+                  </span>
+                </span>
+                <button className="btn sm ghost" onClick={() => void decide(m.id, "dismissed")} aria-label={`Forget: ${m.text}`}>Forget</button>
+              </div>
+            ))}
+            {proposed.length + kept.length === 0 && <p className="hint" style={{ margin: 0 }}>Nothing remembered yet.</p>}
+          </div>
+        )}
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end", maxWidth: 820 }}>
+          <label className="field" style={{ flex: 1, minWidth: 240 }}>
+            <span>Add a memory</span>
+            <input className="input" placeholder="Our customers are mostly on phones." value={draft.text} onChange={(e) => setDraft({ ...draft, text: e.target.value })} />
+          </label>
+          <label className="field">
+            <span>For</span>
+            <select className="select" value={draft.scope} onChange={(e) => setDraft({ ...draft, scope: e.target.value as "project" | "me" })}>
+              <option value="project">This project</option>
+              <option value="me">All my projects</option>
+            </select>
+          </label>
+          <button className="btn" disabled={draft.text.trim().length < 3} onClick={() => void add()}>Add</button>
         </div>
       </section>
     </>

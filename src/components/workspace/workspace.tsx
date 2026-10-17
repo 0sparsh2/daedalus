@@ -231,6 +231,25 @@ export function Workspace({
   const startBuild = useCallback(() => void send("Looks good. Build it following the plan.", "build", "build"), [send]);
   const answer = useCallback((text: string) => void send(text, undefined, "answer"), [send]);
 
+  // Status of memories the agent proposed, so their cards show Kept / Not kept after a reload.
+  const [memoryStatus, setMemoryStatus] = useState<Record<string, string>>({});
+  useEffect(() => {
+    let cancelled = false;
+    api<{ memories: Array<{ id: string; status: string }> }>(`/api/projects/${project.id}/memories`)
+      .then((r) => !cancelled && setMemoryStatus(Object.fromEntries(r.memories.map((m) => [m.id, m.status]))))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [project.id, refreshKey]);
+  const decideMemory = useCallback(
+    (id: string, status: "kept" | "dismissed") => {
+      setMemoryStatus((m) => ({ ...m, [id]: status }));
+      void api(`/api/projects/${project.id}/memories`, { method: "PATCH", json: { id, status } }).catch(() => setMemoryStatus((m) => ({ ...m, [id]: "proposed" })));
+    },
+    [project.id],
+  );
+
   // Select-to-edit: the user points at an element in the preview; we prefill a precise reference.
   const onSelect = useCallback((el: SelectedElement) => {
     const label = el.text ? `“${el.text.slice(0, 60)}”` : `<${el.tag}>`;
@@ -282,6 +301,8 @@ export function Workspace({
               status={status}
               onStartBuild={startBuild}
               onAnswer={answer}
+              memoryStatus={memoryStatus}
+              onMemoryDecision={decideMemory}
               onRequestChanges={() => document.getElementById("composer-input")?.focus()}
               onOpenTrace={(id) => {
                 if (id) setTraceRunId(id);

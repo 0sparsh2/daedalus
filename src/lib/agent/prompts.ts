@@ -20,6 +20,21 @@ export interface PromptContext {
   skills?: SkillSummary[];
   /** Tools from the project's connected MCP servers. */
   connections?: McpToolDescriptor[];
+  /** The user's instructions for all projects, and the memories they chose to keep. */
+  userInstructions?: string;
+  memories?: string[];
+}
+
+function memorySection(c: { userInstructions?: string; memories?: string[] }, canPropose = true): string {
+  const parts: string[] = [];
+  if (c.userInstructions) parts.push(`# The user's instructions (for all their projects)\n${c.userInstructions}`);
+  if (c.memories?.length) parts.push(`# What the user asked you to remember\n${c.memories.map((m) => `- ${m}`).join("\n")}`);
+  if (canPropose) {
+    parts.push(
+      "# Memory\nWhen the user states a lasting preference, makes a decision about the project, or corrects you in a way that should hold next time, propose it with remember: one fact, in plain words. The user chooses whether to keep it. Never store secrets, passwords or personal data, and don't propose what's already listed above.",
+    );
+  }
+  return parts.length ? `\n${parts.join("\n\n")}\n` : "";
 }
 
 function connectionsSection(tools: McpToolDescriptor[] | undefined): string {
@@ -41,7 +56,7 @@ const ENVIRONMENT = (c: PromptContext) => `# Environment
 # Project: ${c.projectName}
 Files right now:
 ${c.fileTree || "(empty)"}
-${c.recentCommits ? `\nRecent versions:\n${c.recentCommits}\n` : ""}${c.agentsMd ? `\n# Project instructions (AGENTS.md)\n${c.agentsMd}\n` : ""}${c.skills?.length ? `\n${skillIndex(c.skills)}` : ""}${connectionsSection(c.connections)}`;
+${c.recentCommits ? `\nRecent versions:\n${c.recentCommits}\n` : ""}${c.agentsMd ? `\n# Project instructions (AGENTS.md)\n${c.agentsMd}\n` : ""}${c.skills?.length ? `\n${skillIndex(c.skills)}` : ""}${connectionsSection(c.connections)}${memorySection(c)}`;
 
 export function buildPrompt(c: PromptContext): string {
   return `You are Daedalus, an expert product engineer who builds working web apps from plain-language requests. You turn ideas into polished, responsive React apps and you finish what you start.
@@ -100,7 +115,7 @@ ${ENVIRONMENT(c)}
 }
 
 /** Conversation without the project's files: greetings, thanks, questions about Daedalus. No tools, no sandbox. */
-export function chatPrompt(c: { projectName: string; state: string; today: string }): string {
+export function chatPrompt(c: { projectName: string; state: string; today: string; userInstructions?: string; memories?: string[] }): string {
   return `You are Daedalus, an AI app builder. People describe an app in plain language; you plan it with them, build it in a live sandbox they watch in the Preview, check your own work, and save every change as a version they can restore. They can push to GitHub or deploy from the Ship menu.
 
 The user is chatting with you in project "${c.projectName}" (${c.state}). Today is ${c.today}.
@@ -108,7 +123,7 @@ The user is chatting with you in project "${c.projectName}" (${c.state}). Today 
 Reply directly, warmly and briefly, in plain language. In this reply you can't see or change the project's files.
 - A greeting or thanks: answer in a sentence or two. If nothing has been built yet, invite them to describe what they'd like to make and offer two or three short example ideas.
 - A question about Daedalus or how to use it: answer it. Plan mode agrees on a plan first; Build mode builds right away; the Preview, Code and Trace tabs show the app, its files and every step taken.
-- Never claim to have built, changed or checked anything in this reply.`;
+- Never claim to have built, changed or checked anything in this reply.${memorySection(c, false)}`;
 }
 
 /** Questions about the user's app: read-only tools, no changes. */
