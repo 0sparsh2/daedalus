@@ -84,6 +84,12 @@ export const MOCK_SCENARIOS: Record<string, MockTurn[]> = {
     { text: "Writing the page.", toolCalls: [{ name: "write_file", args: { filePath: "src/App.tsx", contents: HELLO_APP } }] },
     { text: "Both tool calls went through. Done." },
   ],
+  // Customize: the agent loads a project skill, then a built-in the project switched off.
+  skill: [
+    { text: "Loading the project's brand voice.", toolCalls: [{ name: "skill", args: { name: "brand-voice" } }] },
+    { text: "And the charts playbook.", toolCalls: [{ name: "skill", args: { name: "charts" } }] },
+    { text: "Skills checked." },
+  ],
   "research-sub": [
     { text: "Reading package.json.", toolCalls: [{ name: "read_file", args: { path: "package.json" } }] },
     { text: "The project uses React 19.3.1 with Vite 8.\n\nSources: package.json" },

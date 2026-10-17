@@ -4,6 +4,8 @@
  * steer the agent the same way Codex and Claude Code read AGENTS.md / CLAUDE.md.
  */
 
+import { skillIndex, type SkillSummary } from "@/lib/skills/skill-file";
+
 export interface PromptContext {
   projectName: string;
   fileTree: string;
@@ -13,6 +15,8 @@ export interface PromptContext {
   today: string;
   /** One line on where the project stands, for turns that don't open the sandbox. */
   state?: string;
+  /** Skills available in this project (names and descriptions only; the skill tool loads the rest). */
+  skills?: SkillSummary[];
 }
 
 const ENVIRONMENT = (c: PromptContext) => `# Environment
@@ -25,7 +29,7 @@ const ENVIRONMENT = (c: PromptContext) => `# Environment
 # Project: ${c.projectName}
 Files right now:
 ${c.fileTree || "(empty)"}
-${c.recentCommits ? `\nRecent versions:\n${c.recentCommits}\n` : ""}${c.agentsMd ? `\n# Project instructions (AGENTS.md)\n${c.agentsMd}\n` : ""}`;
+${c.recentCommits ? `\nRecent versions:\n${c.recentCommits}\n` : ""}${c.agentsMd ? `\n# Project instructions (AGENTS.md)\n${c.agentsMd}\n` : ""}${c.skills?.length ? `\n${skillIndex(c.skills)}` : ""}`;
 
 export function buildPrompt(c: PromptContext): string {
   return `You are Daedalus, an expert product engineer who builds working web apps from plain-language requests. You turn ideas into polished, responsive React apps and you finish what you start.

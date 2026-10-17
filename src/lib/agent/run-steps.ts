@@ -3,6 +3,7 @@ import { getWritable } from "workflow";
 import { attachProjectSandbox, ensureProjectSandbox } from "@/lib/sandbox";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { endSpan, recordSpan, startSpan } from "@/lib/trace/spans";
+import { skillsForRun } from "@/lib/skills/project";
 import { emit, requestPreviewReload } from "./emit";
 import { versionTitle } from "./history";
 import type { PromptContext } from "./prompts";
@@ -61,10 +62,13 @@ export async function startRunStep(scope: RunScope, projectName: string): Promis
   await endSpan(sandboxSpan, { status: "ok", startedAt: t0, attrs: { provider: handle.provider, created, stages, previewUrl } });
   await emit({ type: "data-preview", id: "preview", data: { url: previewUrl } });
 
-  const [tree, agents, log] = await Promise.all([
+  const { data: proj } = await db.from("projects").select("settings").eq("id", scope.projectId).maybeSingle();
+  const disabledSkills = ((proj?.settings ?? {}) as { disabledSkills?: string[] }).disabledSkills ?? [];
+  const [tree, agents, log, skills] = await Promise.all([
     impl.listFiles(handle, { depth: 4 }),
     handle.readFile("AGENTS.md"),
     handle.exec("git log --oneline -6 2>/dev/null || true", { timeoutMs: 15_000 }),
+    skillsForRun(handle, disabledSkills),
   ]);
   return {
     projectName,
@@ -73,6 +77,7 @@ export async function startRunStep(scope: RunScope, projectName: string): Promis
     recentCommits: log.stdout.trim() || undefined,
     previewUrl,
     today: new Date().toISOString().slice(0, 10),
+    skills,
   };
 }
 

@@ -185,6 +185,14 @@ export function buildTools() {
       execute: (input, o) => steps.exploreStep(input, ctx(o as Opts)),
       toModelOutput,
     }),
+    skill: tool({
+      description:
+        "Load a skill: a playbook for a specific kind of work (charts, forms, routing, your team's own conventions). Call it when a task matches a skill listed in your instructions, then follow what it says.",
+      inputSchema: z.object({ name: z.string().describe("The skill's name, exactly as listed") }),
+      contextSchema: runScopeSchema,
+      execute: (input, o) => steps.skillStep(input, ctx(o as Opts)),
+      toModelOutput,
+    }),
     ask_user: tool({
       description:
         "Ask the user up to 4 short questions when an answer would change what you build (who it's for, the core flow, a choice between approaches). Offer likely answers as options. Your turn ends here; the answers come in the user's next message. Don't use it for things you can decide sensibly yourself.",
@@ -208,8 +216,8 @@ export type DaedalusTools = ReturnType<typeof buildTools>;
 export type ToolName = keyof DaedalusTools;
 
 /** Tool sets per route. chat has none; ask and plan are read-only; only build changes files. */
-export const ASK_TOOLS: ToolName[] = ["list_files", "read_file", "glob", "grep", "research", "explore", "ask_user"];
-export const PLAN_TOOLS: ToolName[] = ["list_files", "read_file", "glob", "grep", "research", "explore", "ask_user", "propose_plan"];
+export const ASK_TOOLS: ToolName[] = ["list_files", "read_file", "glob", "grep", "research", "explore", "skill", "ask_user"];
+export const PLAN_TOOLS: ToolName[] = ["list_files", "read_file", "glob", "grep", "research", "explore", "skill", "ask_user", "propose_plan"];
 export const BUILD_TOOLS: ToolName[] = [
   "list_files",
   "read_file",
@@ -225,5 +233,6 @@ export const BUILD_TOOLS: ToolName[] = [
   "update_todos",
   "research",
   "explore",
+  "skill",
   "ask_user",
 ];

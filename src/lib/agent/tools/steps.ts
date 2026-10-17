@@ -2,6 +2,8 @@ import "server-only";
 import { requestPreviewReload } from "../emit";
 import { runSubagent } from "../subagents";
 import { runTool, stableId, ToolError } from "../runtime";
+import { loadSkill } from "@/lib/skills/project";
+import { supabaseAdmin } from "@/lib/supabase/admin";
 import { routeOf, type RunScope, type ToolOutput } from "../scope";
 import * as impl from "./impl";
 
@@ -104,6 +106,18 @@ export async function todosStep(input: { todos: Array<{ content: string; status:
     },
     { sandbox: false, kind: "system" },
   );
+}
+
+export async function skillStep(input: { name: string }, ctx: Ctx) {
+  "use step";
+  return runTool("skill", input, ctx, async (s) => {
+    const { data } = await supabaseAdmin().from("projects").select("settings").eq("id", ctx.scope.projectId).maybeSingle();
+    const disabled = ((data?.settings ?? {}) as { disabledSkills?: string[] }).disabledSkills ?? [];
+    const found = await loadSkill(s, input.name, disabled);
+    if (!found) throw new ToolError(`No skill named "${input.name}" in this project. Use one of the skills listed in your instructions.`);
+    const files = found.files.length ? `\n\nOther files in this skill (read them with read_file when the instructions refer to them):\n${found.files.map((f) => `- ${f}`).join("\n")}` : "";
+    return { ok: true, text: `# Skill: ${found.skill.name}\n${found.skill.description}\n\n${found.skill.body}${files}`, source: found.source };
+  });
 }
 
 export async function askUserStep(input: { questions: Array<{ question: string; options?: string[] }> }, ctx: Ctx) {
