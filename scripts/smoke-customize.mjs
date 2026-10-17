@@ -37,6 +37,7 @@ async function turn(projectId, text, mode = "build") {
       if (!line.startsWith("{")) continue;
       const e = JSON.parse(line);
       if (e.type === "tool-input-available") names.set(e.toolCallId, { name: e.toolName, input: e.input });
+      if (e.type === "tool-input-error" || e.type === "tool-output-error") tools.push({ name: e.toolName ?? names.get(e.toolCallId)?.name, error: e.errorText });
       if (e.type === "tool-output-available") tools.push({ ...names.get(e.toolCallId), output: e.output });
       if (e.type === "data-check" && e.data?.status !== "running") checks.push(e.data);
     }
@@ -87,6 +88,26 @@ const notes = ruled.tools.find((t) => t.input?.path === "src/notes.txt");
 check("after-change rule runs on the file", /formatted src\/notes\.txt/.test(notes?.output?.text ?? ""));
 check("failing before-finish rule fails the check", ruled.checks[0]?.status === "failed");
 check("check passes once the rule passes", ruled.checks.at(-1)?.status === "passed" && ruled.checks.at(-1)?.rules === true, JSON.stringify(ruled.checks));
+
+// Connections (MCP) against real public servers
+const c7 = await call("POST", `/api/projects/${pid}/connections`, { name: "context7", url: "https://mcp.context7.com/mcp", readOnly: false });
+check("connect a public MCP server and list its tools", c7.status === 200 && c7.body?.tools >= 2, JSON.stringify(c7.body).slice(0, 120));
+const dw = await call("POST", `/api/projects/${pid}/connections`, { name: "deepwiki", url: "https://mcp.deepwiki.com/mcp" });
+check("connect a second server", dw.status === 200, JSON.stringify(dw.body).slice(0, 120));
+const plainHttp = await call("POST", `/api/projects/${pid}/connections`, { name: "plain", url: "http://example.com/mcp" });
+check("plain http address refused", plainHttp.status === 400, plainHttp.body?.error?.message);
+const privateAddr = await call("POST", `/api/projects/${pid}/connections`, { name: "private", url: "https://10.0.0.5/mcp" });
+check("private address refused", privateAddr.status === 400, privateAddr.body?.error?.message);
+const listed = await call("GET", `/api/projects/${pid}/connections`);
+check("tokens never returned", !JSON.stringify(listed.body).includes("secret_ciphertext"));
+const planned = await turn(pid, "[mock:mcp-plan] Plan with docs", "plan");
+const c7call = planned.tools.find((t) => t.name === "mcp__context7__resolve-library-id");
+const dwPlan = planned.tools.find((t) => t.name === "mcp__deepwiki__read_wiki_structure");
+check("read-only connection tool works while planning", c7call?.output?.ok === true && /react/i.test(c7call.output.text), (c7call?.output?.text ?? c7call?.error ?? "").slice(0, 90));
+check("tool that isn't read-only is unavailable while planning", Boolean(dwPlan?.error) || dwPlan?.output?.ok === false, (dwPlan?.error ?? dwPlan?.output?.text ?? "").slice(0, 90));
+const built = await turn(pid, "[mock:mcp-build] Use the wiki");
+const dwBuild = built.tools.find((t) => t.name === "mcp__deepwiki__read_wiki_structure");
+check("every connection tool works while building", dwBuild?.output?.ok === true && dwBuild.output.text.length > 50, (dwBuild?.output?.text ?? dwBuild?.error ?? "").slice(0, 90));
 
 console.log(failed ? `${failed} failed` : "all passed");
 process.exit(failed ? 1 : 0);

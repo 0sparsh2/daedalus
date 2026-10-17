@@ -24,7 +24,7 @@ function isPrivate(ip: string): boolean {
   );
 }
 
-async function assertPublic(url: URL) {
+export async function assertPublic(url: URL) {
   if (url.protocol !== "http:" && url.protocol !== "https:") throw new ToolError(`Only http(s) URLs can be fetched (got ${url.protocol}).`);
   const host = url.hostname.replace(/^\[|\]$/g, "");
   if (host === "localhost" || host.endsWith(".local") || host.endsWith(".internal")) throw new ToolError("Local addresses can't be fetched.");

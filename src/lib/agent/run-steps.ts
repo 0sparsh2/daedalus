@@ -3,6 +3,7 @@ import { getWritable } from "workflow";
 import { attachProjectSandbox, ensureProjectSandbox } from "@/lib/sandbox";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { endSpan, recordSpan, startSpan } from "@/lib/trace/spans";
+import { connectionTools } from "@/lib/mcp/connections";
 import { skillsForRun } from "@/lib/skills/project";
 import { emit, requestPreviewReload } from "./emit";
 import { projectRules, runBeforeFinish } from "./rules-run";
@@ -65,11 +66,12 @@ export async function startRunStep(scope: RunScope, projectName: string): Promis
 
   const { data: proj } = await db.from("projects").select("settings").eq("id", scope.projectId).maybeSingle();
   const disabledSkills = ((proj?.settings ?? {}) as { disabledSkills?: string[] }).disabledSkills ?? [];
-  const [tree, agents, log, skills] = await Promise.all([
+  const [tree, agents, log, skills, connections] = await Promise.all([
     impl.listFiles(handle, { depth: 4 }),
     handle.readFile("AGENTS.md"),
     handle.exec("git log --oneline -6 2>/dev/null || true", { timeoutMs: 15_000 }),
     skillsForRun(handle, disabledSkills),
+    connectionTools(scope.projectId).catch(() => []),
   ]);
   return {
     projectName,
@@ -79,6 +81,7 @@ export async function startRunStep(scope: RunScope, projectName: string): Promis
     previewUrl,
     today: new Date().toISOString().slice(0, 10),
     skills,
+    connections,
   };
 }
 

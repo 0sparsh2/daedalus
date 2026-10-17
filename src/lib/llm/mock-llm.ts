@@ -99,6 +99,17 @@ export const MOCK_SCENARIOS: Record<string, MockTurn[]> = {
     { text: "A project rule failed. Creating the file it expects.", toolCalls: [{ name: "write_file", args: { path: "src/rule-ok.txt", content: "ok\n" } }] },
     { text: "Fixed: the project rule passes now." },
   ],
+  // Connections: a read-only tool works while planning; a tool that isn't read-only doesn't.
+  "mcp-plan": [
+    { text: "Looking up React's docs.", toolCalls: [{ name: "mcp__context7__resolve-library-id", args: { query: "React hooks", libraryName: "react" } }] },
+    { text: "And the repository's wiki.", toolCalls: [{ name: "mcp__deepwiki__read_wiki_structure", args: { repoName: "vercel/ai" } }] },
+    { text: "Planning with what I found." },
+  ],
+  // While building, every connected tool is available.
+  "mcp-build": [
+    { text: "Reading the repository's wiki.", toolCalls: [{ name: "mcp__deepwiki__read_wiki_structure", args: { repoName: "vercel/ai" } }] },
+    { text: "Got it." },
+  ],
   "research-sub": [
     { text: "Reading package.json.", toolCalls: [{ name: "read_file", args: { path: "package.json" } }] },
     { text: "The project uses React 19.3.1 with Vite 8.\n\nSources: package.json" },

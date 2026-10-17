@@ -1,7 +1,8 @@
 import "server-only";
 import { requestPreviewReload } from "../emit";
 import { runSubagent } from "../subagents";
-import { runTool, stableId, ToolError } from "../runtime";
+import { callConnectionTool } from "@/lib/mcp/connections";
+import { runTool, stableId, ToolError, truncateMiddle } from "../runtime";
 import type { SandboxHandle } from "@/lib/sandbox";
 import { loadSkill } from "@/lib/skills/project";
 import { blockingRule, projectRules, ruleName, runAfterChange } from "../rules-run";
@@ -136,6 +137,25 @@ export async function skillStep(input: { name: string }, ctx: Ctx) {
     return { ok: true, text: `# Skill: ${found.skill.name}\n${found.skill.description}\n\n${found.skill.body}${files}`, source: found.source };
   });
 }
+
+/** Calls a tool on one of the project's connected MCP servers, from Daedalus's server. */
+export async function mcpToolStep(input: { connectionId: string; connection: string; tool: string; args: Record<string, unknown>; readOnly: boolean }, ctx: Ctx) {
+  "use step";
+  if (!input.readOnly && routeOf(ctx.scope) !== "build") return readOnlyRefusal(ctx.scope);
+  return runTool(
+    `mcp:${input.connection}.${input.tool}`,
+    { tool: input.tool, args: input.args },
+    ctx,
+    async () => {
+      const r = await callConnectionTool(ctx.scope.userId, input.connectionId, input.tool, input.args ?? {});
+      if (r.isError) throw new ToolError(`${input.connection} reported an error: ${truncateMiddle(r.text, 4000)}`);
+      return { ok: true, text: truncateMiddle(r.text, 12_000), connection: input.connection };
+    },
+    { sandbox: false },
+  );
+}
+// A connected service may have side effects; don't repeat a call that might have gone through.
+mcpToolStep.maxRetries = 1;
 
 export async function askUserStep(input: { questions: Array<{ question: string; options?: string[] }> }, ctx: Ctx) {
   "use step";

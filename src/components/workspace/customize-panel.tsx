@@ -4,9 +4,10 @@ import { Icon } from "@/components/icons";
 import { ApiError, api } from "@/lib/client/api";
 import { describeRule, type Rule, type RulePreset } from "@/lib/rules";
 
-type Section = "skills" | "rules";
+type Section = "connections" | "skills" | "rules";
 
 const SECTIONS: Array<[Section, string]> = [
+  ["connections", "Connections"],
   ["skills", "Skills"],
   ["rules", "Rules that always run"],
 ];
@@ -16,7 +17,7 @@ const SECTIONS: Array<[Section, string]> = [
  * format (SKILL.md files in the repo, AGENTS.md, MCP servers), so nothing is locked in.
  */
 export function CustomizePanel({ projectId, hasSandbox, refreshKey }: { projectId: string; hasSandbox: boolean; refreshKey: number }) {
-  const [section, setSection] = useState<Section>("skills");
+  const [section, setSection] = useState<Section>("connections");
   return (
     <div className="agents">
       <div className="mode" role="group" aria-label="Customize sections" style={{ justifySelf: "start" }}>
@@ -26,6 +27,7 @@ export function CustomizePanel({ projectId, hasSandbox, refreshKey }: { projectI
           </button>
         ))}
       </div>
+      {section === "connections" && <ConnectionsSection projectId={projectId} />}
       {section === "skills" && <SkillsSection projectId={projectId} hasSandbox={hasSandbox} refreshKey={refreshKey} />}
       {section === "rules" && <RulesSection projectId={projectId} />}
     </div>
@@ -357,6 +359,167 @@ function RulesSection({ projectId }: { projectId: string }) {
           <div>
             <button className="btn primary" disabled={!draftValid} onClick={() => { void save([...rules, draftToRule(draft)]); setDraft(EMPTY_RULE); }}>
               Add rule
+            </button>
+          </div>
+        </div>
+      </section>
+    </>
+  );
+}
+
+interface ConnectionInfo {
+  id: string;
+  name: string;
+  url: string;
+  read_only: boolean;
+  enabled: boolean;
+  tools: Array<{ name: string; description: string; readOnly: boolean }>;
+  status: "ok" | "error";
+  error: string | null;
+}
+interface Suggestion {
+  name: string;
+  url: string;
+  description: string;
+  readOnly: boolean;
+}
+
+function ConnectionsSection({ projectId }: { projectId: string }) {
+  const [list, setList] = useState<{ connections: ConnectionInfo[]; suggested: Suggestion[] } | null>(null);
+  const [form, setForm] = useState({ name: "", url: "", token: "", readOnly: false });
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [open, setOpen] = useState<string | null>(null);
+  const [reload, setReload] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    api<{ connections: ConnectionInfo[]; suggested: Suggestion[] }>(`/api/projects/${projectId}/connections`)
+      .then((r) => !cancelled && setList(r))
+      .catch((e) => !cancelled && setError(e instanceof ApiError ? e.message : "Couldn't load connections"));
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, reload]);
+
+  async function add(body: { name: string; url: string; token?: string; readOnly: boolean }, key: string) {
+    setBusy(key);
+    setError(null);
+    try {
+      await api(`/api/projects/${projectId}/connections`, { method: "POST", json: body });
+      setForm({ name: "", url: "", token: "", readOnly: false });
+      setReload((n) => n + 1);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Couldn't connect");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function patch(id: string, body: Record<string, boolean>) {
+    setBusy(id);
+    const r = await api<{ ok: boolean; error?: string }>(`/api/projects/${projectId}/connections`, { method: "PATCH", json: { id, ...body } }).catch(() => null);
+    if (r && r.ok === false && r.error) setError(r.error);
+    setBusy(null);
+    setReload((n) => n + 1);
+  }
+
+  async function remove(id: string) {
+    await api(`/api/projects/${projectId}/connections?id=${id}`, { method: "DELETE" }).catch(() => {});
+    setReload((n) => n + 1);
+  }
+
+  if (!list) return error ? <div className="error-text">{error}</div> : <span className="spin" />;
+
+  return (
+    <>
+      <section aria-labelledby="conn-h" className="agents-sec">
+        <h2 id="conn-h" className="label">Connections</h2>
+        <p className="muted" style={{ margin: 0, fontSize: 14 }}>
+          Connect services through MCP, the open standard for giving agents tools. Daedalus calls them from its own server, never from your app&apos;s
+          sandbox, and every call shows in the trace. Tools that only read data work in any turn; tools that change things only while building.
+        </p>
+        <div style={{ display: "grid", gap: 8 }}>
+          {list.connections.map((c) => (
+            <article key={c.id} className="agent-card">
+              <div style={{ display: "flex", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
+                <span className="agent-ic"><Icon name="globe" /></span>
+                <div style={{ flex: 1, minWidth: 200 }}>
+                  <b>{c.name}</b> {c.status === "error" ? <span className="error-text">· can&apos;t reach it</span> : <span className="muted">· {c.tools.length} tool{c.tools.length === 1 ? "" : "s"}</span>}
+                  <div className="muted mono" style={{ fontSize: 12.5, overflowWrap: "anywhere" }}>{c.url}</div>
+                  {c.error && c.status === "error" && <div className="hint">{c.error}</div>}
+                </div>
+                <label style={{ display: "inline-flex", gap: 6, alignItems: "center", fontSize: 14 }}>
+                  <input type="checkbox" checked={c.enabled} onChange={(e) => void patch(c.id, { enabled: e.target.checked })} /> On
+                </label>
+              </div>
+              <label style={{ display: "inline-flex", gap: 6, alignItems: "center", fontSize: 13.5 }}>
+                <input type="checkbox" checked={c.read_only} onChange={(e) => void patch(c.id, { readOnly: e.target.checked })} /> This service only reads data (its tools can be used while planning and answering)
+              </label>
+              {open === c.id && (
+                <ul style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 4, fontSize: 13 }}>
+                  {c.tools.map((t) => (
+                    <li key={t.name}>
+                      <span className="mono">{t.name}</span>
+                      {(t.readOnly || c.read_only) && <span className="muted"> · read-only</span>}
+                      <div className="muted">{t.description.slice(0, 200)}</div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                <button className="btn sm" aria-expanded={open === c.id} onClick={() => setOpen(open === c.id ? null : c.id)}>{open === c.id ? "Hide tools" : "Show tools"}</button>
+                <button className="btn sm" disabled={busy === c.id} onClick={() => void patch(c.id, { refresh: true })}>{busy === c.id && <span className="spin" />} Check again</button>
+                <button className="btn sm ghost" onClick={() => void remove(c.id)} aria-label={`Remove ${c.name}`}>Remove</button>
+              </div>
+            </article>
+          ))}
+          {list.connections.length === 0 && <p className="hint" style={{ margin: 0 }}>Nothing connected yet.</p>}
+        </div>
+        {error && <span className="error-text" role="alert">{error}</span>}
+      </section>
+
+      {list.suggested.length > 0 && (
+        <section aria-labelledby="sugg-h" className="agents-sec">
+          <h2 id="sugg-h" className="label">Free to connect</h2>
+          <div className="agent-cards">
+            {list.suggested.map((s) => (
+              <article key={s.name} className="agent-card">
+                <b>{s.name}</b>
+                <span className="muted" style={{ fontSize: 13.5 }}>{s.description}</span>
+                <span className="hint mono" style={{ overflowWrap: "anywhere" }}>{s.url}</span>
+                <button className="btn sm" style={{ justifySelf: "start" }} disabled={busy === s.name} onClick={() => void add({ name: s.name, url: s.url, readOnly: s.readOnly }, s.name)}>
+                  {busy === s.name && <span className="spin" />} Connect
+                </button>
+              </article>
+            ))}
+          </div>
+          <p className="hint" style={{ margin: 0 }}>These are third-party services: when the agent uses them, its queries go to them.</p>
+        </section>
+      )}
+
+      <section aria-labelledby="custom-conn-h" className="agents-sec">
+        <h2 id="custom-conn-h" className="label">Add an MCP server</h2>
+        <div style={{ display: "grid", gap: 10, maxWidth: 720 }}>
+          <label className="field">
+            <span>Name</span>
+            <input className="input mono" placeholder="linear" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-") })} />
+          </label>
+          <label className="field">
+            <span>Server address</span>
+            <input className="input mono" placeholder="https://mcp.example.com/mcp" value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} />
+          </label>
+          <label className="field">
+            <span>Access token (optional)</span>
+            <input className="input mono" type="password" autoComplete="off" placeholder="Sent as a Bearer token" value={form.token} onChange={(e) => setForm({ ...form, token: e.target.value })} />
+            <span className="hint">Stored encrypted and never shown again. Only Daedalus&apos;s server uses it, for this project&apos;s calls.</span>
+          </label>
+          <label style={{ display: "inline-flex", gap: 6, alignItems: "center", fontSize: 14 }}>
+            <input type="checkbox" checked={form.readOnly} onChange={(e) => setForm({ ...form, readOnly: e.target.checked })} /> This service only reads data
+          </label>
+          <div>
+            <button className="btn primary" disabled={!form.name || !form.url || busy === "custom"} onClick={() => void add({ name: form.name, url: form.url, token: form.token || undefined, readOnly: form.readOnly }, "custom")}>
+              {busy === "custom" && <span className="spin" />} Connect and list its tools
             </button>
           </div>
         </div>

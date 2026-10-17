@@ -21,6 +21,7 @@
   "dependencies": {
     "@ai-sdk/anthropic": "4.0.79",
     "@ai-sdk/deepseek": "3.0.64",
+    "@ai-sdk/mcp": "2.0.74",
     "@ai-sdk/openai": "4.0.93",
     "@ai-sdk/openai-compatible": "3.0.68",
     "@ai-sdk/provider": "4.0.27",

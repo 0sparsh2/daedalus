@@ -1,5 +1,5 @@
 import { WorkflowAgent, type ModelCallStreamPart } from "@ai-sdk/workflow";
-import { convertToModelMessages, hasToolCall, isStepCount, type ModelMessage, type StopCondition, type ToolSet, type UIMessage } from "ai";
+import { convertToModelMessages, hasToolCall, isStepCount, jsonSchema, tool, type JSONSchema7, type ModelMessage, type StopCondition, type ToolSet, type UIMessage } from "ai";
 import { getWritable } from "workflow";
 import { compactHistory, turnFacts } from "@/lib/agent/history";
 import { STEP_LIMIT, makePrepareStep } from "@/lib/agent/loop";
@@ -10,6 +10,7 @@ import type { Intent, Route } from "@/lib/agent/router";
 import { finalCheckStep, finishRunStep, isCancelledStep, startRunStep } from "@/lib/agent/run-steps";
 import type { RunScope } from "@/lib/agent/scope";
 import { ASK_TOOLS, BUILD_TOOLS, PLAN_TOOLS, buildTools, type ToolName } from "@/lib/agent/tools";
+import { mcpToolStep } from "@/lib/agent/tools/steps";
 import { stepsToParts, type PlainPart } from "@/lib/agent/ui-parts";
 import { GatewayModel } from "@/lib/llm/gateway-model";
 import type { AnyProviderId } from "@/lib/llm/providers";
@@ -76,15 +77,31 @@ export async function agentRun(input: AgentRunInput) {
   }
 
   const profile = PROFILES[route];
-  const tools = buildTools();
-  const toolsContext = Object.fromEntries(Object.keys(tools).map((k) => [k, scope])) as Record<ToolName, RunScope>;
+  const builtIn = buildTools();
+  const toolsContext = Object.fromEntries(Object.keys(builtIn).map((k) => [k, scope])) as Record<ToolName, RunScope>;
+  // Connected MCP servers' tools: all of them in build turns, read-only ones elsewhere, none in chat.
+  const mcp = route === "chat" ? [] : (context.connections ?? []).filter((d) => route === "build" || d.readOnly);
+  const tools: ToolSet = {
+    ...builtIn,
+    ...Object.fromEntries(
+      mcp.map((d) => [
+        d.key,
+        tool({
+          description: d.description,
+          inputSchema: jsonSchema(d.inputSchema as JSONSchema7),
+          execute: (args, o) => mcpToolStep({ connectionId: d.connectionId, connection: d.connection, tool: d.tool, args: (args ?? {}) as Record<string, unknown>, readOnly: d.readOnly }, { toolCallId: o.toolCallId, scope }),
+        }),
+      ]),
+    ),
+  };
   const token = route === input.scope.mode ? input.token : await agentTokenStep(scope, route);
   const agent = new WorkflowAgent({
     model: new GatewayModel({ provider: scope.provider as AnyProviderId, modelId: scope.model, gatewayURL: scope.gatewayURL, token }),
     instructions: promptFor(route, context),
     tools,
-    toolsContext,
-    activeTools: profile.tools,
+    // Built-in tools read the run scope from their context; connection tools carry it themselves.
+    toolsContext: toolsContext as never,
+    activeTools: [...profile.tools, ...mcp.map((d) => d.key)] as ToolName[],
     prepareStep: makePrepareStep({ contextWindow: scope.contextWindow, route }),
     repairToolCall,
     maxRetries: 3,

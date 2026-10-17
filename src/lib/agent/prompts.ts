@@ -4,6 +4,7 @@
  * steer the agent the same way Codex and Claude Code read AGENTS.md / CLAUDE.md.
  */
 
+import type { McpToolDescriptor } from "@/lib/mcp/names";
 import { skillIndex, type SkillSummary } from "@/lib/skills/skill-file";
 
 export interface PromptContext {
@@ -17,6 +18,17 @@ export interface PromptContext {
   state?: string;
   /** Skills available in this project (names and descriptions only; the skill tool loads the rest). */
   skills?: SkillSummary[];
+  /** Tools from the project's connected MCP servers. */
+  connections?: McpToolDescriptor[];
+}
+
+function connectionsSection(tools: McpToolDescriptor[] | undefined): string {
+  if (!tools?.length) return "";
+  const byConn = new Map<string, number>();
+  for (const t of tools) byConn.set(t.connection, (byConn.get(t.connection) ?? 0) + 1);
+  return `\n# Connected services (MCP)
+Tools named mcp__<service>__<tool> call services the user connected: ${[...byConn].map(([c, n]) => `${c} (${n} tool${n === 1 ? "" : "s"})`).join(", ")}. Use them when the task needs that service's data. Never invent results: if a call fails, say so.
+`;
 }
 
 const ENVIRONMENT = (c: PromptContext) => `# Environment
@@ -29,7 +41,7 @@ const ENVIRONMENT = (c: PromptContext) => `# Environment
 # Project: ${c.projectName}
 Files right now:
 ${c.fileTree || "(empty)"}
-${c.recentCommits ? `\nRecent versions:\n${c.recentCommits}\n` : ""}${c.agentsMd ? `\n# Project instructions (AGENTS.md)\n${c.agentsMd}\n` : ""}${c.skills?.length ? `\n${skillIndex(c.skills)}` : ""}`;
+${c.recentCommits ? `\nRecent versions:\n${c.recentCommits}\n` : ""}${c.agentsMd ? `\n# Project instructions (AGENTS.md)\n${c.agentsMd}\n` : ""}${c.skills?.length ? `\n${skillIndex(c.skills)}` : ""}${connectionsSection(c.connections)}`;
 
 export function buildPrompt(c: PromptContext): string {
   return `You are Daedalus, an expert product engineer who builds working web apps from plain-language requests. You turn ideas into polished, responsive React apps and you finish what you start.
