@@ -53,7 +53,8 @@ for kv in \
   "NEXT_PUBLIC_AUTH_PROVIDERS=github,google,email" \
   "NEXT_PUBLIC_APP_URL=https://<your-domain>" \
   "GITHUB_CLIENT_ID=<id>" "GITHUB_CLIENT_SECRET=<secret>" \
-  "VERCEL_DEPLOY_TOKEN=<token with deploy scope>" "VERCEL_DEPLOY_TEAM_ID=<team id>"; do
+  "VERCEL_DEPLOY_TOKEN=<token with deploy scope>" "VERCEL_DEPLOY_TEAM_ID=<team id>" \
+  "TAVILY_API_KEY=<free key from tavily.com>"; do
   printf '%s' "${kv#*=}" | vercel env add "${kv%%=*}" production
 done
 vercel --prod
@@ -61,7 +62,8 @@ vercel --prod
 
 - **Keep the encryption key safe.** Changing `CREDENTIALS_ENCRYPTION_KEY` later makes stored keys undecryptable, and users would have to re-enter them.
 - **Sandbox auth** uses OIDC automatically on Vercel; there's no token to set.
-- **Optional, faster cold starts:** run `vercel env pull .env.local && node scripts/build-template-snapshot.mjs`, then set `VERCEL_TEMPLATE_SNAPSHOT_ID` to the printed id.
+- **Web search for research:** set `TAVILY_API_KEY` (free tier: 1,000 searches a month, no card). SearXNG is free too but has to be hosted somewhere with a stable IP; point `SEARXNG_URL` at it if you run one. Without either, research falls back to DuckDuckGo (often blocked from cloud IPs) and then npm and GitHub search.
+- **Optional, faster cold starts:** run `vercel env pull .env.vercel.local && node --env-file=.env.vercel.local scripts/build-template-snapshot.mjs`, then set `VERCEL_TEMPLATE_SNAPSHOT_ID` to the printed id. (Pull into a separate file: `.env.local` holds your local secrets.)
 - **Preview deployments** are protected by Vercel Authentication. To run agents on them, enable *Protection Bypass for Automation*; `VERCEL_AUTOMATION_BYPASS_SECRET` is then forwarded on gateway calls.
 
 ## 5. Check production

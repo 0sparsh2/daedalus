@@ -49,6 +49,7 @@ You need Node 20.9+, pnpm 10, and Docker (for the local Supabase stack and the D
 pnpm install
 pnpm db:start                 # local Supabase in Docker; applies supabase/migrations
 pnpm sandbox:image            # builds the local sandbox image (starter app pre-installed)
+pnpm search:start             # optional: free, keyless web search (SearXNG) for research sub-agents
 cp .env.example .env.local    # then fill in the values (see below)
 pnpm dev
 ```
@@ -69,7 +70,8 @@ Open http://localhost:3000, describe an app and press Send. With `NEXT_PUBLIC_EN
 | `NEXT_PUBLIC_ENABLE_MOCK_PROVIDER`, `DAEDALUS_ENABLE_MOCK` | Show and allow the scripted mock model (dev/test only) |
 | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | GitHub OAuth app for "Connect GitHub" (callback `/api/github/callback`) |
 | `VERCEL_DEPLOY_TOKEN`, `VERCEL_DEPLOY_TEAM_ID` | Deploying users' apps to Vercel |
-| `TAVILY_API_KEY`, `BRAVE_SEARCH_API_KEY` | Optional: web search APIs for the research sub-agent. Without them it falls back to DuckDuckGo, then npm and GitHub search |
+| `SEARXNG_URL` | Optional: a SearXNG instance for free, keyless web search (`pnpm search:start` runs one at `http://127.0.0.1:8888`). Tried first |
+| `TAVILY_API_KEY`, `BRAVE_SEARCH_API_KEY` | Optional: hosted search APIs, tried next. Tavily's free tier (1,000 searches a month, no card) suits production; Brave is paid. Without any of these, research falls back to DuckDuckGo, then npm and GitHub search |
 | `VERCEL_TOKEN`, `VERCEL_TEAM_ID`, `VERCEL_PROJECT_ID` | Vercel Sandbox from a non-Vercel host (on Vercel, OIDC is automatic) |
 
 ## Tests
