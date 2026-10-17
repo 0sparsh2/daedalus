@@ -5,6 +5,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { endSpan, recordSpan, startSpan } from "@/lib/trace/spans";
 import { skillsForRun } from "@/lib/skills/project";
 import { emit, requestPreviewReload } from "./emit";
+import { projectRules, runBeforeFinish } from "./rules-run";
 import { versionTitle } from "./history";
 import type { PromptContext } from "./prompts";
 import { stableId } from "./runtime";
@@ -92,6 +93,8 @@ export interface FinalCheck {
   skipped?: boolean;
   report?: string;
   problems?: number;
+  /** Whether the project's before-finish rules passed (absent when it has none). */
+  rules?: boolean;
 }
 
 /** The harness's gate: type check, build and preview must pass before a build run ends. */
@@ -111,20 +114,25 @@ export async function finalCheckStep(scope: RunScope, round: number): Promise<Fi
     impl.verify(sandbox),
     impl.checkPreview(sandbox, { projectId: scope.projectId, fresh: { checkId, requestReload: () => requestPreviewReload(checkId) } }),
   ]);
-  const ok = v.ok && p.ok;
-  const report = ok ? "" : [v.ok ? "" : v.text, p.ok ? "" : p.text].filter(Boolean).join("\n\n");
-  await endSpan(id, { status: ok ? "ok" : "error", startedAt: t0, output: { verify: v.text.slice(0, 1500), preview: p.text.slice(0, 1500) } });
+  // The project's own "before finishing" rules (tests, lint) run after the built-in checks.
+  const rules = await runBeforeFinish(sandbox, await projectRules(scope.projectId));
+  const failedRules = rules.results.filter((r) => !r.ok);
+  const rulesText = failedRules.map((r) => `Project rule "${r.name}" failed (\`${r.command}\`):\n${r.output || "(no output)"}`).join("\n\n");
+  const ok = v.ok && p.ok && rules.ok;
+  const report = ok ? "" : [v.ok ? "" : v.text, p.ok ? "" : p.text, rulesText].filter(Boolean).join("\n\n");
+  await endSpan(id, { status: ok ? "ok" : "error", startedAt: t0, output: { verify: v.text.slice(0, 1500), preview: p.text.slice(0, 1500), rules: rules.results.map((r) => ({ name: r.name, ok: r.ok })) } });
   await emit({
     type: "data-check",
     id: `check-${round}`,
-    data: { round, status: ok ? "passed" : "failed", typecheck: v.typecheckOk, build: v.buildOk, preview: p.ok, problems: ok ? 0 : (v.diagnostics?.length ?? 0) + Number(p.problems ?? 0) },
+    data: { round, status: ok ? "passed" : "failed", typecheck: v.typecheckOk, build: v.buildOk, preview: p.ok, rules: rules.results.length ? rules.ok : undefined, problems: ok ? 0 : (v.diagnostics?.length ?? 0) + Number(p.problems ?? 0) + failedRules.length },
   });
   // The agent's next round opens with `reset-step`, which clears the client's current step.
   // Start a fresh step first so this round's text and the check result stay on screen.
   if (!ok) await emit({ type: "start-step" });
   return {
     ok,
-    problems: ok ? 0 : (v.diagnostics?.length ?? 0) + Number(p.problems ?? 0),
+    rules: rules.results.length ? rules.ok : undefined,
+    problems: ok ? 0 : (v.diagnostics?.length ?? 0) + Number(p.problems ?? 0) + failedRules.length,
     report: ok
       ? undefined
       : `[Automatic check by Daedalus] Your changes don't pass yet, so the run can't finish. Fix these problems, then run verify and check_preview again:\n\n${report}`,

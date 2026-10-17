@@ -25,6 +25,7 @@ async function turn(projectId, text, mode = "build") {
   const res = await fetch(`${BASE}/api/chat`, { method: "POST", headers: auth, body: JSON.stringify({ projectId, message: { id: `u-${Date.now()}`, role: "user", parts: [{ type: "text", text }] }, mode }) });
   const projId = res.headers.get("x-daedalus-project-id");
   const tools = [];
+  const checks = [];
   const names = new Map();
   let buf = "";
   for await (const chunk of res.body) {
@@ -37,9 +38,10 @@ async function turn(projectId, text, mode = "build") {
       const e = JSON.parse(line);
       if (e.type === "tool-input-available") names.set(e.toolCallId, { name: e.toolName, input: e.input });
       if (e.type === "tool-output-available") tools.push({ ...names.get(e.toolCallId), output: e.output });
+      if (e.type === "data-check" && e.data?.status !== "running") checks.push(e.data);
     }
   }
-  return { projectId: projId, tools };
+  return { projectId: projId, tools, checks };
 }
 
 await call("POST", "/api/credentials", { provider: "mock", apiKey: "mock-key-for-tests", model: "mock-builder" });
@@ -66,6 +68,25 @@ check("switched-off built-in is refused", charts?.output?.ok === false, charts?.
 await call("DELETE", `/api/projects/${pid}/skills?name=brand-voice`);
 skills = await call("GET", `/api/projects/${pid}/skills`);
 check("project skill deleted", skills.body?.project?.length === 0);
+
+// Rules that always run
+const rulesPut = await call("PUT", `/api/projects/${pid}/rules`, {
+  rules: [
+    { id: "r1", event: "before_command", pattern: "npm install", reason: "Ask first." },
+    { id: "r2", event: "after_change", glob: "src/**/*.txt", command: "echo formatted {file}" },
+    { id: "r3", event: "before_finish", label: "Marker exists", command: "test -f src/rule-ok.txt" },
+  ],
+});
+check("rules saved", rulesPut.status === 200 && rulesPut.body?.rules?.length === 3);
+const badRules = await call("PUT", `/api/projects/${pid}/rules`, { rules: [{ id: "x", event: "before_finish" }] });
+check("invalid rule rejected", badRules.status === 400);
+const ruled = await turn(pid, "[mock:rules] Follow the rules");
+const install = ruled.tools.find((t) => t.name === "run_command");
+check("matching command is blocked", install?.output?.ok === false && /Blocked by a project rule/.test(install.output.text), install?.output?.text?.slice(0, 70));
+const notes = ruled.tools.find((t) => t.input?.path === "src/notes.txt");
+check("after-change rule runs on the file", /formatted src\/notes\.txt/.test(notes?.output?.text ?? ""));
+check("failing before-finish rule fails the check", ruled.checks[0]?.status === "failed");
+check("check passes once the rule passes", ruled.checks.at(-1)?.status === "passed" && ruled.checks.at(-1)?.rules === true, JSON.stringify(ruled.checks));
 
 console.log(failed ? `${failed} failed` : "all passed");
 process.exit(failed ? 1 : 0);

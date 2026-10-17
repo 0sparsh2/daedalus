@@ -2,10 +2,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { Icon } from "@/components/icons";
 import { ApiError, api } from "@/lib/client/api";
+import { describeRule, type Rule, type RulePreset } from "@/lib/rules";
 
-type Section = "skills";
+type Section = "skills" | "rules";
 
-const SECTIONS: Array<[Section, string]> = [["skills", "Skills"]];
+const SECTIONS: Array<[Section, string]> = [
+  ["skills", "Skills"],
+  ["rules", "Rules that always run"],
+];
 
 /**
  * Customize: how Daedalus works on this project. Everything here is a standard, portable
@@ -23,6 +27,7 @@ export function CustomizePanel({ projectId, hasSandbox, refreshKey }: { projectI
         ))}
       </div>
       {section === "skills" && <SkillsSection projectId={projectId} hasSandbox={hasSandbox} refreshKey={refreshKey} />}
+      {section === "rules" && <RulesSection projectId={projectId} />}
     </div>
   );
 }
@@ -209,3 +214,154 @@ function SkillsSection({ projectId, hasSandbox, refreshKey }: { projectId: strin
     </>
   );
 }
+
+type RuleDraft = { event: Rule["event"]; label: string; command: string; pattern: string; reason: string; glob: string };
+const EMPTY_RULE: RuleDraft = { event: "before_finish", label: "", command: "", pattern: "", reason: "", glob: "src/**/*" };
+const WHEN: Array<[Rule["event"], string]> = [
+  ["before_finish", "Daedalus is about to finish a change"],
+  ["before_command", "Daedalus is about to run a command"],
+  ["after_change", "a file changes"],
+];
+const newId = () => Math.random().toString(36).slice(2, 10);
+
+function draftToRule(d: RuleDraft): Rule {
+  const base = { id: newId(), enabled: true, label: d.label.trim() || undefined };
+  if (d.event === "before_finish") return { ...base, event: "before_finish", command: d.command.trim() };
+  if (d.event === "before_command") return { ...base, event: "before_command", pattern: d.pattern.trim(), reason: d.reason.trim() || undefined };
+  return { ...base, event: "after_change", command: d.command.trim(), glob: d.glob.trim() || "**/*" };
+}
+
+function RulesSection({ projectId }: { projectId: string }) {
+  const [rules, setRules] = useState<Rule[] | null>(null);
+  const [presets, setPresets] = useState<RulePreset[]>([]);
+  const [draft, setDraft] = useState<RuleDraft>(EMPTY_RULE);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api<{ rules: Rule[]; presets: RulePreset[] }>(`/api/projects/${projectId}/rules`)
+      .then((r) => {
+        if (cancelled) return;
+        setRules(r.rules);
+        setPresets(r.presets);
+      })
+      .catch((e) => !cancelled && setError(e instanceof ApiError ? e.message : "Couldn't load rules"));
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId]);
+
+  async function save(next: Rule[]) {
+    const before = rules;
+    setRules(next);
+    setError(null);
+    try {
+      await api(`/api/projects/${projectId}/rules`, { method: "PUT", json: { rules: next } });
+    } catch (e) {
+      setRules(before);
+      setError(e instanceof ApiError ? e.message : "Couldn't save the rules");
+    }
+  }
+
+  if (!rules) return error ? <div className="error-text">{error}</div> : <span className="spin" />;
+  const unusedPresets = presets.filter((p) => !rules.some((r) => r.label === p.label));
+  const draftValid = draft.event === "before_command" ? Boolean(draft.pattern.trim()) : Boolean(draft.command.trim());
+
+  return (
+    <>
+      <section aria-labelledby="rules-h" className="agents-sec">
+        <h2 id="rules-h" className="label">Rules that always run</h2>
+        <p className="muted" style={{ margin: 0, fontSize: 14 }}>
+          Instructions and skills are requests. <b>Rules always run</b>: Daedalus enforces them on every build, whatever the model decides. They&apos;re stored
+          in Daedalus, so the agent can&apos;t edit them away.
+        </p>
+        <div style={{ display: "grid", gap: 8 }}>
+          {rules.map((r) => (
+            <div key={r.id} className="agent-card" style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+              <label style={{ display: "inline-flex", gap: 8, alignItems: "center", flex: 1, minWidth: 220 }}>
+                <input type="checkbox" checked={r.enabled !== false} onChange={(e) => void save(rules.map((x) => (x.id === r.id ? { ...x, enabled: e.target.checked } : x)))} />
+                <span>
+                  <b>{r.label || describeRule(r)}</b>
+                  {r.label && <span className="muted mono" style={{ display: "block", fontSize: 12.5 }}>{describeRule(r)}</span>}
+                </span>
+              </label>
+              <button className="btn sm ghost" onClick={() => void save(rules.filter((x) => x.id !== r.id))} aria-label={`Remove rule ${r.label || describeRule(r)}`}>
+                Remove
+              </button>
+            </div>
+          ))}
+          {rules.length === 0 && <p className="hint" style={{ margin: 0 }}>No rules yet. The built-in automatic check (type check, build, preview) always runs.</p>}
+        </div>
+        {error && <span className="error-text" role="alert">{error}</span>}
+      </section>
+
+      {unusedPresets.length > 0 && (
+        <section aria-labelledby="presets-h" className="agents-sec">
+          <h2 id="presets-h" className="label">Common rules</h2>
+          <div className="agent-cards">
+            {unusedPresets.map((p) => (
+              <article key={p.label} className="agent-card">
+                <b>{p.label}</b>
+                <span className="muted mono" style={{ fontSize: 12.5 }}>{describeRule({ ...p, id: "x", enabled: true } as Rule)}</span>
+                <button className="btn sm" style={{ justifySelf: "start" }} onClick={() => void save([...rules, { ...p, id: newId(), enabled: true } as Rule])}>
+                  Add rule
+                </button>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <section aria-labelledby="newrule-h" className="agents-sec">
+        <h2 id="newrule-h" className="label">New rule</h2>
+        <div style={{ display: "grid", gap: 10, maxWidth: 720 }}>
+          <label className="field">
+            <span>When</span>
+            <select className="select" value={draft.event} onChange={(e) => setDraft({ ...draft, event: e.target.value as Rule["event"] })}>
+              {WHEN.map(([v, l]) => (
+                <option key={v} value={v}>{l}</option>
+              ))}
+            </select>
+          </label>
+          {draft.event === "before_command" ? (
+            <>
+              <label className="field">
+                <span>Block commands that start with</span>
+                <input className="input mono" placeholder="npm install" value={draft.pattern} onChange={(e) => setDraft({ ...draft, pattern: e.target.value })} />
+                <span className="hint">Use * as a wildcard to match the whole command, for example <span className="mono">rm -rf *</span>.</span>
+              </label>
+              <label className="field">
+                <span>Why (shown to the agent)</span>
+                <input className="input" placeholder="Ask me before adding dependencies." value={draft.reason} onChange={(e) => setDraft({ ...draft, reason: e.target.value })} />
+              </label>
+            </>
+          ) : (
+            <>
+              {draft.event === "after_change" && (
+                <label className="field">
+                  <span>Files</span>
+                  <input className="input mono" placeholder="src/**/*.{ts,tsx}" value={draft.glob} onChange={(e) => setDraft({ ...draft, glob: e.target.value })} />
+                </label>
+              )}
+              <label className="field">
+                <span>{draft.event === "before_finish" ? "Run this command; it must pass" : "Run this command on the file"}</span>
+                <input className="input mono" placeholder={draft.event === "before_finish" ? "npm test" : "npx --yes prettier --write {file}"} value={draft.command} onChange={(e) => setDraft({ ...draft, command: e.target.value })} />
+                {draft.event === "after_change" && <span className="hint"><span className="mono">{"{file}"}</span> is replaced by the changed file&apos;s path.</span>}
+              </label>
+            </>
+          )}
+          <label className="field">
+            <span>Name (optional)</span>
+            <input className="input" placeholder="Run the tests" value={draft.label} onChange={(e) => setDraft({ ...draft, label: e.target.value })} />
+          </label>
+          <div>
+            <button className="btn primary" disabled={!draftValid} onClick={() => { void save([...rules, draftToRule(draft)]); setDraft(EMPTY_RULE); }}>
+              Add rule
+            </button>
+          </div>
+        </div>
+      </section>
+    </>
+  );
+}
+

@@ -302,7 +302,7 @@ export function PlanCard({ part, canBuild, onStartBuild, onRequestChanges }: { p
   );
 }
 
-export function CheckLine({ data }: { data: { round: number; status: string; problems?: number } }) {
+export function CheckLine({ data }: { data: { round: number; status: string; problems?: number; rules?: boolean } }) {
   if (data.status === "running") {
     return (
       <div className="check-line">
@@ -314,7 +314,7 @@ export function CheckLine({ data }: { data: { round: number; status: string; pro
   return (
     <div className={`check-line ${ok ? "passed" : "failed"}`}>
       <Icon name={ok ? "shield" : "alert"} size={14} />
-      {ok ? "Automatic check passed: it compiles, builds and renders." : `Automatic check found ${data.problems ?? "some"} problem${data.problems === 1 ? "" : "s"}; Daedalus is fixing ${data.problems === 1 ? "it" : "them"}.`}
+      {ok ? `Automatic check passed: it compiles, builds${data.rules ? ", renders and passes your project's rules" : " and renders"}.` : `Automatic check found ${data.problems ?? "some"} problem${data.problems === 1 ? "" : "s"}; Daedalus is fixing ${data.problems === 1 ? "it" : "them"}.`}
     </div>
   );
 }

@@ -90,6 +90,15 @@ export const MOCK_SCENARIOS: Record<string, MockTurn[]> = {
     { text: "And the charts playbook.", toolCalls: [{ name: "skill", args: { name: "charts" } }] },
     { text: "Skills checked." },
   ],
+  // Rules that always run: a blocked command, an after-change command, and a before-finish
+  // rule that fails until the agent creates the file it checks for.
+  rules: [
+    { text: "Adding a package.", toolCalls: [{ name: "run_command", args: { command: "npm install left-pad" } }] },
+    { text: "Writing notes instead.", toolCalls: [{ name: "write_file", args: { path: "src/notes.txt", content: "hello\n" } }] },
+    { text: "Done." },
+    { text: "A project rule failed. Creating the file it expects.", toolCalls: [{ name: "write_file", args: { path: "src/rule-ok.txt", content: "ok\n" } }] },
+    { text: "Fixed: the project rule passes now." },
+  ],
   "research-sub": [
     { text: "Reading package.json.", toolCalls: [{ name: "read_file", args: { path: "package.json" } }] },
     { text: "The project uses React 19.3.1 with Vite 8.\n\nSources: package.json" },

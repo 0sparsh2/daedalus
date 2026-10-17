@@ -128,7 +128,7 @@ export async function agentRun(input: AgentRunInput) {
       }
       const check = await finalCheckStep(scope, round);
       if (check.skipped) break;
-      parts.push({ type: "data-check", id: `check-${round}`, data: { round, status: check.ok ? "passed" : "failed", problems: check.problems } });
+      parts.push({ type: "data-check", id: `check-${round}`, data: { round, status: check.ok ? "passed" : "failed", problems: check.problems, rules: check.rules } });
       if (check.ok || round === rounds - 1) break;
       parts.push({ type: "step-start" });
       messages = [...messages, { role: "user", content: [{ type: "text", text: check.report ?? "" }] }];

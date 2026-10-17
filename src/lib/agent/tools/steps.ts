@@ -2,7 +2,9 @@ import "server-only";
 import { requestPreviewReload } from "../emit";
 import { runSubagent } from "../subagents";
 import { runTool, stableId, ToolError } from "../runtime";
+import type { SandboxHandle } from "@/lib/sandbox";
 import { loadSkill } from "@/lib/skills/project";
+import { blockingRule, projectRules, ruleName, runAfterChange } from "../rules-run";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { routeOf, type RunScope, type ToolOutput } from "../scope";
 import * as impl from "./impl";
@@ -29,19 +31,26 @@ export async function writeFileStep(input: { path: string; content: string }, ct
   "use step";
   if (routeOf(ctx.scope) !== "build") return readOnlyRefusal(ctx.scope);
   // Keep the event log lean: the content is in the model's tool call already.
-  return runTool("write_file", { path: input.path, bytes: input.content.length }, ctx, (s) => impl.writeFile(s, input));
+  return runTool("write_file", { path: input.path, bytes: input.content.length }, ctx, async (s) => afterChange(s, ctx, input.path, await impl.writeFile(s, input)));
 }
 
 export async function editFileStep(input: { path: string; old_string: string; new_string: string; replace_all?: boolean }, ctx: Ctx) {
   "use step";
   if (routeOf(ctx.scope) !== "build") return readOnlyRefusal(ctx.scope);
-  return runTool("edit_file", input, ctx, (s) => impl.editFile(s, input));
+  return runTool("edit_file", input, ctx, async (s) => afterChange(s, ctx, input.path, await impl.editFile(s, input)));
 }
 
 export async function deleteFileStep(input: { path: string }, ctx: Ctx) {
   "use step";
   if (routeOf(ctx.scope) !== "build") return readOnlyRefusal(ctx.scope);
   return runTool("delete_file", input, ctx, (s) => impl.deleteFile(s, input));
+}
+
+/** Project rules that run when a file changes (formatters, linters); their output goes to the agent. */
+async function afterChange<T extends ToolOutput>(s: SandboxHandle, ctx: Ctx, path: string, out: T): Promise<T> {
+  if (!out.ok) return out;
+  const notes = await runAfterChange(s, await projectRules(ctx.scope.projectId), path).catch(() => "");
+  return notes ? { ...out, text: `${out.text}${notes}` } : out;
 }
 
 export async function globStep(input: { pattern: string; path?: string }, ctx: Ctx) {
@@ -57,7 +66,15 @@ export async function grepStep(input: { pattern: string; path?: string; glob?: s
 export async function runCommandStep(input: { command: string; cwd?: string; timeout_seconds?: number }, ctx: Ctx) {
   "use step";
   if (routeOf(ctx.scope) !== "build") return readOnlyRefusal(ctx.scope);
-  return runTool("run_command", input, ctx, (s) => impl.runCommand(s, input));
+  return runTool("run_command", input, ctx, async (s) => {
+    const rule = blockingRule(await projectRules(ctx.scope.projectId), input.command);
+    if (rule) {
+      throw new ToolError(
+        `Blocked by a project rule (${ruleName(rule)})${rule.event === "before_command" && rule.reason ? `: ${rule.reason}` : ""}. Don't work around it; if the task needs this command, tell the user.`,
+      );
+    }
+    return impl.runCommand(s, input);
+  });
 }
 // Commands can have side effects (npm install); the harness retries transport errors itself.
 runCommandStep.maxRetries = 1;
