@@ -84,7 +84,7 @@ export function ToolCard({ part }: { part: ToolPart }) {
       icon = "pencil";
       title = (
         <>
-          {o.created ? "Created" : isDone(part) ? "Wrote" : "Writing"} <span className="mono">{short(i.path)}</span>
+          {failed(part) ? "Couldn't write" : o.created ? "Created" : isDone(part) ? "Wrote" : "Writing"} <span className="mono">{short(i.path)}</span>
         </>
       );
       if (isDone(part) && !failed(part)) meta = <span className="mono">+{String(o.added ?? 0)} −{String(o.removed ?? 0)}</span>;
@@ -94,7 +94,7 @@ export function ToolCard({ part }: { part: ToolPart }) {
       icon = "pencil";
       title = (
         <>
-          {isDone(part) ? "Edited" : "Editing"} <span className="mono">{short(i.path)}</span>
+          {failed(part) ? "Couldn't edit" : isDone(part) ? "Edited" : "Editing"} <span className="mono">{short(i.path)}</span>
         </>
       );
       if (isDone(part) && !failed(part)) meta = <span className="mono">+{String(o.added ?? 0)} −{String(o.removed ?? 0)}</span>;

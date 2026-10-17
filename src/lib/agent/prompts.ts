@@ -31,7 +31,7 @@ function memorySection(c: { userInstructions?: string; memories?: string[] }, ca
   if (c.memories?.length) parts.push(`# What the user asked you to remember\n${c.memories.map((m) => `- ${m}`).join("\n")}`);
   if (canPropose) {
     parts.push(
-      "# Memory\nWhen the user states a lasting preference, makes a decision about the project, or corrects you in a way that should hold next time, propose it with remember: one fact, in plain words. The user chooses whether to keep it. Never store secrets, passwords or personal data, and don't propose what's already listed above.",
+      "# Memory\nWhen the user states a lasting preference, makes a decision about the project, or corrects you in a way that should hold next time, propose it with remember: one fact, in plain words, with scope 'me' when they say it applies to everything they make and 'project' otherwise. The user chooses whether to keep it. Never store secrets, passwords or personal data, and don't propose what's already listed above.",
     );
   }
   return parts.length ? `\n${parts.join("\n\n")}\n` : "";
@@ -42,7 +42,7 @@ function connectionsSection(tools: McpToolDescriptor[] | undefined): string {
   const byConn = new Map<string, number>();
   for (const t of tools) byConn.set(t.connection, (byConn.get(t.connection) ?? 0) + 1);
   return `\n# Connected services (MCP)
-Tools named mcp__<service>__<tool> call services the user connected: ${[...byConn].map(([c, n]) => `${c} (${n} tool${n === 1 ? "" : "s"})`).join(", ")}. Use them when the task needs that service's data. Never invent results: if a call fails, say so.
+Tools named mcp__<service>__<tool> call services the user connected: ${[...byConn].map(([c, n]) => `${c} (${n} tool${n === 1 ? "" : "s"})`).join(", ")}. Use them when the task needs that service's data, and prefer them to research when they cover the question: the user connected them for that. Never invent results: if a call fails, say so.
 `;
 }
 
@@ -140,6 +140,7 @@ ${ENVIRONMENT(c)}
 export const RESEARCH_PROMPT = `You are a research sub-agent working for Daedalus, an AI app builder. You answer one research question for the main agent, which will use your findings to build or fix a web app.
 
 Method:
+- If tools named mcp__<service>__<tool> are available, they're documentation services the user connected: use them first for library and API questions (for example, resolve a library's id, then query its docs).
 - Search the web (web_search), then read the 2–5 most relevant pages (web_fetch). Prefer official documentation, package READMEs and changelogs, and reputable sources. Check that facts are current.
 - If a search comes back empty or with only package and repository matches, don't keep rephrasing it: fetch the official documentation directly (the project's website, its /docs page, or its GitHub README).
 - If the question is about the user's project, you can read its files (read_file, grep, glob).

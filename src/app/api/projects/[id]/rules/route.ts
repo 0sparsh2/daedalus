@@ -7,7 +7,7 @@ type Ctx = { params: Promise<{ id: string }> };
 
 /** Ready-made rules the UI offers with one click. */
 const PRESETS: RulePreset[] = [
-  { event: "before_finish", label: "Run the tests before finishing", command: "npm test" },
+  { event: "before_finish", label: "Run the tests before finishing", command: "npm test --if-present" },
   { event: "before_command", label: "Ask before adding packages", pattern: "npm install", reason: "Ask the user before adding or reinstalling dependencies." },
   { event: "after_change", label: "Format changed files", glob: "src/**/*.{ts,tsx,css}", command: "npx --yes prettier --write {file}" },
 ];

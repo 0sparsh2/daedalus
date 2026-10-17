@@ -1,5 +1,5 @@
 import "server-only";
-import { ToolLoopAgent, isStepCount, tool, type UIMessageChunk } from "ai";
+import { ToolLoopAgent, isStepCount, jsonSchema, tool, type JSONSchema7, type UIMessageChunk } from "ai";
 import { getWritable } from "workflow";
 import { z } from "zod";
 import { GatewayModel } from "@/lib/llm/gateway-model";
@@ -8,7 +8,8 @@ import type { AnyProviderId } from "@/lib/llm/providers";
 import { attachProjectSandbox, type SandboxHandle } from "@/lib/sandbox";
 import { addRunUsage, endSpan, recordSpan, startSpan } from "@/lib/trace/spans";
 import { EXPLORE_PROMPT, RESEARCH_PROMPT } from "./prompts";
-import { ToolError, errorDetail, stableId } from "./runtime";
+import { callConnectionTool, connectionTools } from "@/lib/mcp/connections";
+import { ToolError, errorDetail, stableId, truncateMiddle } from "./runtime";
 import type { RunScope, ToolOutput } from "./scope";
 import * as impl from "./tools/impl";
 import { webFetch, webSearch } from "./tools/web";
@@ -163,6 +164,22 @@ export async function runSubagent(
           }),
           read_file: readOnly.read_file,
           grep: readOnly.grep,
+          // The project's read-only connections (docs services and the like) are research tools too.
+          ...Object.fromEntries(
+            (await connectionTools(scope.projectId).catch(() => []))
+              .filter((d) => d.readOnly)
+              .map((d) => [
+                d.key,
+                tool({
+                  description: d.description,
+                  inputSchema: jsonSchema<Record<string, unknown>>(d.inputSchema as JSONSchema7),
+                  execute: traced(d.key, async (args: Record<string, unknown>) => {
+                    const r = await callConnectionTool(scope.userId, d.connectionId, d.tool, args ?? {});
+                    return { ok: !r.isError, text: truncateMiddle(r.text, 8000) };
+                  }),
+                }),
+              ]),
+          ),
         }
       : readOnly;
 
