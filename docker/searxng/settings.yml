@@ -1,0 +1,19 @@
+# Local SearXNG for Daedalus's research sub-agent: free, keyless web search (metasearch over
+# several engines). Started by `pnpm search:start`; Daedalus reads it from SEARXNG_URL.
+use_default_settings: true
+
+server:
+  # The secret comes from SEARXNG_SECRET at start-up (scripts/searxng.sh); never commit one.
+  limiter: false # local, single user: no bot limiter in front of our own requests
+  image_proxy: false
+  public_instance: false
+
+search:
+  safe_search: 0
+  default_lang: "en"
+  formats:
+    - html
+    - json # the JSON API is off by default; Daedalus needs it
+
+ui:
+  static_use_hash: true

@@ -110,7 +110,23 @@ export interface SearchHit {
 
 type Engine = (query: string, n: number) => Promise<SearchHit[]>;
 
-/** Tavily: a search API built for agents (TAVILY_API_KEY). */
+/**
+ * SearXNG: free, keyless, self-hosted metasearch (SEARXNG_URL). `pnpm search:start` runs one
+ * locally; in production it can point at any instance with the JSON format enabled.
+ */
+const searxng: Engine = async (query, n) => {
+  const base = process.env.SEARXNG_URL;
+  if (!base) return [];
+  const res = await fetch(`${base.replace(/\/$/, "")}/search?q=${encodeURIComponent(query)}&format=json&language=en`, {
+    headers: { accept: "application/json" },
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  });
+  if (!res.ok) return [];
+  const j = (await res.json()) as { results?: Array<{ title: string; url: string; content?: string }> };
+  return (j.results ?? []).slice(0, n).map((r) => ({ title: htmlToText(r.title), url: r.url, snippet: htmlToText(r.content ?? "").slice(0, 400) }));
+};
+
+/** Tavily: a search API built for agents (TAVILY_API_KEY; free tier: 1,000 searches a month). */
 const tavily: Engine = async (query, n) => {
   const key = process.env.TAVILY_API_KEY;
   if (!key) return [];
@@ -125,7 +141,7 @@ const tavily: Engine = async (query, n) => {
   return (j.results ?? []).map((r) => ({ title: r.title, url: r.url, snippet: r.content.slice(0, 400) }));
 };
 
-/** Brave Search's official API (BRAVE_SEARCH_API_KEY). */
+/** Brave Search's official API (BRAVE_SEARCH_API_KEY; paid since 2026, $5 of monthly credit). */
 const brave: Engine = async (query, n) => {
   const key = process.env.BRAVE_SEARCH_API_KEY;
   if (!key) return [];
@@ -187,13 +203,15 @@ const developerIndexes: Engine = async (query, n) => {
 };
 
 /**
- * Web search through the first engine that answers: official APIs when a key is configured
- * (Tavily, Brave), then DuckDuckGo, then the npm and GitHub indexes. The result says which
- * engine answered, so the agent knows how much to trust it.
+ * Web search through the first engine that answers: free ones first (a SearXNG instance when
+ * SEARXNG_URL is set), then APIs when a key is configured (Tavily's free tier, Brave), then
+ * DuckDuckGo, then the npm and GitHub indexes. The result says which engine answered, so the
+ * agent knows how much to trust it.
  */
 export async function webSearch(input: { query: string; max_results?: number }): Promise<ToolOutput & { hits: SearchHit[] }> {
   const n = Math.min(input.max_results ?? 6, 10);
   const engines: Array<[string, Engine]> = [
+    ["SearXNG", searxng],
     ["Tavily", tavily],
     ["Brave", brave],
     ["DuckDuckGo", duckDuckGo],

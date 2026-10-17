@@ -14,7 +14,9 @@
     "e2e": "playwright test",
     "sandbox:image": "docker build -f docker/sandbox.Dockerfile -t daedalus-sandbox:latest .",
     "db:start": "supabase start",
-    "db:reset": "supabase db reset"
+    "db:reset": "supabase db reset",
+    "search:start": "scripts/searxng.sh start",
+    "search:stop": "scripts/searxng.sh stop"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "4.0.79",
