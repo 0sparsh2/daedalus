@@ -12,7 +12,10 @@ export const runScopeSchema = z.object({
   model: z.string(),
   subagentModel: z.string(),
   gatewayURL: z.string(),
+  /** The user's Plan/Build toggle: the ceiling on what a turn may do. */
   mode: z.enum(["plan", "build"]),
+  /** What this turn does, set by the turn router (router.ts). Only "build" may change files. */
+  route: z.enum(["chat", "ask", "plan", "build"]).optional(),
   contextWindow: z.number(),
   maxOutputTokens: z.number(),
   /** Per-model request options (e.g. reasoning effort) for the builder and the sub-agents. */
@@ -21,6 +24,9 @@ export const runScopeSchema = z.object({
 });
 
 export type RunScope = z.infer<typeof runScopeSchema>;
+
+/** The turn's route; runs from before the router fall back to their mode. */
+export const routeOf = (scope: RunScope) => scope.route ?? scope.mode;
 
 /** Shape every tool returns. `text` is what the model reads; the rest feeds the UI. */
 export interface ToolOutput {

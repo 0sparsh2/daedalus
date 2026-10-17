@@ -22,6 +22,8 @@ const bodySchema = z.object({
     parts: z.array(z.object({ type: z.string() }).passthrough()).min(1),
   }),
   mode: z.enum(["plan", "build"]).default("build"),
+  /** What the user did beyond typing: pressed "Start building", or answered the agent's questions. */
+  intent: z.enum(["build", "answer"]).optional(),
   model: z.object({ provider: z.string(), model: z.string() }).optional(),
 });
 
@@ -105,6 +107,7 @@ export async function POST(req: Request) {
         history,
         token,
         assistantMessageId,
+        intent: parsed.data.intent,
       },
     ]);
     await db.from("runs").update({ workflow_run_id: wf.runId }).eq("id", run.id);

@@ -45,12 +45,39 @@ export function compactHistory(messages: UIMessage[]): UIMessage[] {
       if (p.type === "tool-propose_plan" && p.input) {
         keep.push({ type: "text", text: `Proposed plan:\n${JSON.stringify(p.input, null, 2)}` });
       }
+      // Keep questions put to the user, so their answer in the next message makes sense.
+      if (p.type === "tool-ask_user" && p.input) {
+        const qs = ((p.input as { questions?: Array<{ question?: string; options?: string[] }> }).questions ?? []).map(
+          (q) => `- ${q.question}${q.options?.length ? ` (options: ${q.options.join(" / ")})` : ""}`,
+        );
+        if (qs.length) keep.push({ type: "text", text: `Asked the user:\n${qs.join("\n")}` });
+      }
     }
     const ledger = ledgerFor(parts);
     if (ledger) keep.push({ type: "text", text: ledger });
     if (keep.length === 0) keep.push({ type: "text", text: "(no reply)" });
     return { ...m, parts: keep };
   });
+}
+
+/** What the turn router needs from the conversation: the new message and the turn before it. */
+export function turnFacts(messages: UIMessage[]): { text: string; lastAssistant?: string; pendingPlan: boolean } {
+  const textOf = (m: UIMessage) =>
+    (m.parts as AnyPart[])
+      .filter((p) => p.type === "text")
+      .map((p) => String(p.text ?? ""))
+      .join("\n")
+      .trim();
+  const lastUser = messages.map((m) => m.role).lastIndexOf("user");
+  const prev = [...messages.slice(0, Math.max(lastUser, 0))].reverse().find((m) => m.role === "assistant");
+  const prevParts = (prev?.parts ?? []) as AnyPart[];
+  const asked = prevParts.find((p) => p.type === "tool-ask_user");
+  const questions = ((asked?.input as { questions?: Array<{ question?: string }> } | undefined)?.questions ?? []).map((q) => q.question).join(" ");
+  return {
+    text: lastUser >= 0 ? textOf(messages[lastUser]) : "",
+    lastAssistant: prev ? [textOf(prev), questions && `Asked: ${questions}`].filter(Boolean).join(" ") || undefined : undefined,
+    pendingPlan: prevParts.some((p) => p.type === "tool-propose_plan"),
+  };
 }
 
 /**

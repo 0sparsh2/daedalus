@@ -7,7 +7,8 @@ import { emit, requestPreviewReload } from "./emit";
 import { versionTitle } from "./history";
 import type { PromptContext } from "./prompts";
 import { stableId } from "./runtime";
-import type { RunScope } from "./scope";
+import type { RouteDecision } from "./router";
+import { routeOf, type RunScope } from "./scope";
 import * as impl from "./tools/impl";
 import type { PlainPart } from "./ui-parts";
 
@@ -17,20 +18,37 @@ import type { PlainPart } from "./ui-parts";
  * claims), and finish (git checkpoint, persist the assistant message, close the run).
  */
 
+const RUN_NAME = { chat: "Chat", ask: "Answer", plan: "Plan run", build: "Build run" } as const;
+
 export async function startRunStep(scope: RunScope, projectName: string): Promise<PromptContext> {
   "use step";
   const db = supabaseAdmin();
+  const route = routeOf(scope);
   await db.from("runs").update({ status: "running" }).eq("id", scope.runId);
-  await db.from("projects").update({ status: "building", last_run_id: scope.runId }).eq("id", scope.projectId);
+  await db.from("projects").update(route === "build" ? { status: "building", last_run_id: scope.runId } : { last_run_id: scope.runId }).eq("id", scope.projectId);
   await startSpan({
     id: scope.runId,
     runId: scope.runId,
     projectId: scope.projectId,
     userId: scope.userId,
     kind: "run",
-    name: scope.mode === "plan" ? "Plan run" : "Build run",
-    attrs: { provider: scope.provider, model: scope.model, subagentModel: scope.subagentModel, mode: scope.mode },
+    name: RUN_NAME[route],
+    attrs: { provider: scope.provider, model: scope.model, subagentModel: scope.subagentModel, mode: scope.mode, route },
   });
+
+  // Chat turns never touch the sandbox: their context comes from the database, so they answer at once.
+  if (route === "chat") {
+    const { data: versions, count } = await db
+      .from("checkpoints")
+      .select("message", { count: "exact" })
+      .eq("project_id", scope.projectId)
+      .order("created_at", { ascending: false })
+      .limit(3);
+    const state = count
+      ? `${count} saved version${count === 1 ? "" : "s"}; latest: ${versions?.map((v) => v.message).join("; ")}`
+      : "nothing built yet: the project is the starter app";
+    return { projectName, fileTree: "", today: new Date().toISOString().slice(0, 10), state };
+  }
 
   const sandboxSpan = stableId(scope.runId, "sandbox");
   const t0 = new Date();
@@ -115,6 +133,8 @@ export interface FinishInput {
   parts: PlainPart[];
   assistantMessageId: string;
   planTitle?: string;
+  /** The turn router's decision, saved with the message so the UI can show which agent answered. */
+  route?: RouteDecision;
 }
 
 export async function finishRunStep(scope: RunScope, input: FinishInput) {
@@ -123,7 +143,7 @@ export async function finishRunStep(scope: RunScope, input: FinishInput) {
   const extra: PlainPart[] = [];
 
   let checkpoint: { sha: string; files: number } | null = null;
-  if (scope.mode === "build") {
+  if (routeOf(scope) === "build") {
     try {
       const sandbox = await attachProjectSandbox(scope.projectId);
       const lastText = [...input.parts].reverse().find((p) => p.type === "text")?.text as string | undefined;
@@ -155,7 +175,7 @@ export async function finishRunStep(scope: RunScope, input: FinishInput) {
     role: "assistant",
     parts,
     run_id: scope.runId,
-    metadata: { runId: scope.runId, model: scope.model, provider: scope.provider, mode: scope.mode },
+    metadata: { runId: scope.runId, model: scope.model, provider: scope.provider, mode: scope.mode, route: input.route ?? { route: routeOf(scope), by: "default", reason: "" } },
   });
 
   const summary = ([...input.parts].reverse().find((p) => p.type === "text")?.text as string | undefined)?.slice(0, 500) ?? null;

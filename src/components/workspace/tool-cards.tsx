@@ -1,8 +1,9 @@
 "use client";
+import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Icon, type IconName } from "@/components/icons";
-import { normalizePlan } from "@/lib/plan";
+import { normalizePlan, normalizeQuestions } from "@/lib/plan";
 
 export interface ToolPart {
   type: string;
@@ -325,3 +326,92 @@ export function CheckpointLine({ data }: { data: { sha: string; message: string;
     </div>
   );
 }
+
+const ROUTE_CHIP: Record<string, { label: string; icon: "sparkle" | "eye" | "list" | "bolt" }> = {
+  chat: { label: "Chat · no changes", icon: "sparkle" },
+  ask: { label: "Answer · read-only", icon: "eye" },
+  plan: { label: "Planning · read-only", icon: "list" },
+  build: { label: "Building", icon: "bolt" },
+};
+
+/** Which agent the turn router picked for this message, and why (on hover). */
+export function RouteChip({ data }: { data: { route: string; by: string; reason: string } }) {
+  const chip = ROUTE_CHIP[data.route];
+  if (!chip) return null;
+  const why = data.by === "model" ? `Router: ${data.reason}` : data.reason;
+  return (
+    <span className="route-chip" title={why}>
+      <Icon name={chip.icon} size={12} /> {chip.label}
+    </span>
+  );
+}
+
+/** ask_user: the agent's questions with suggested answers. Answering sends them as the next message. */
+export function QuestionsCard({ part, canAnswer, onAnswer }: { part: ToolPart; canAnswer: boolean; onAnswer(text: string): void }) {
+  const [picked, setPicked] = useState<Record<number, string>>({});
+  const [typed, setTyped] = useState<Record<number, string>>({});
+  if (part.state === "output-error" || part.state === "input-error") return null;
+  const questions = normalizeQuestions(part.input);
+  if (!questions.length) {
+    return (
+      <div className="status-line">
+        <span className="spin" /> Writing questions…
+      </div>
+    );
+  }
+  const answerOf = (i: number) => typed[i]?.trim() || picked[i];
+  const answered = questions.filter((_, i) => answerOf(i)).length;
+  const submit = () => {
+    const lines = questions.map((q, i) => (answerOf(i) ? (questions.length === 1 ? answerOf(i) : `${q.question} → ${answerOf(i)}`) : null)).filter(Boolean);
+    if (lines.length) onAnswer(lines.join("\n"));
+  };
+  return (
+    <section className="qa-card" aria-label="Questions for you">
+      <div className="label">A few questions</div>
+      {questions.map((q, i) => (
+        <div key={i} className="qa-q">
+          <p className="qa-question">{q.question}</p>
+          {canAnswer && q.options.length > 0 && (
+            <div className="qa-options" role="group" aria-label={q.question}>
+              {q.options.map((o) => (
+                <button
+                  key={o}
+                  type="button"
+                  className="chip"
+                  aria-pressed={picked[i] === o}
+                  onClick={() => {
+                    setPicked((p) => ({ ...p, [i]: p[i] === o ? "" : o }));
+                    setTyped((t) => ({ ...t, [i]: "" }));
+                  }}
+                >
+                  {o}
+                </button>
+              ))}
+            </div>
+          )}
+          {!canAnswer && q.options.length > 0 && <p className="muted qa-optlist">{q.options.join(" · ")}</p>}
+          {canAnswer && (
+            <input
+              className="input"
+              aria-label={`Your own answer: ${q.question}`}
+              placeholder="Or type your own answer"
+              value={typed[i] ?? ""}
+              onChange={(e) => setTyped((t) => ({ ...t, [i]: e.target.value }))}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) submit();
+              }}
+            />
+          )}
+        </div>
+      ))}
+      {canAnswer && (
+        <div className="plan-actions">
+          <button className="btn primary" disabled={answered === 0} onClick={submit}>
+            <Icon name="arrowup" /> {answered === questions.length || questions.length === 1 ? "Send answer" + (questions.length > 1 ? "s" : "") : `Send ${answered} of ${questions.length} answers`}
+          </button>
+        </div>
+      )}
+    </section>
+  );
+}
+

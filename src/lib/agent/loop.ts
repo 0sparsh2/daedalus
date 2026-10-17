@@ -9,10 +9,11 @@ import type { LanguageModelV4Message, LanguageModelV4Prompt } from "@ai-sdk/prov
  *    replaced with a one-line stub (the files are still on disk; the agent can re-read).
  *  - Doom-loop guard: the same tool call with the same input three steps running triggers a
  *    corrective note instead of a fourth identical attempt.
- *  - Step budget: near the limit, the agent is told to verify and wrap up.
+ *  - Step budget: near the limit, the agent is told to verify and wrap up; on the last step its
+ *    tools are switched off, so a long run always ends with a summary instead of mid-action.
  */
 
-export const STEP_LIMIT = { plan: 24, build: 70 } as const;
+export const STEP_LIMIT = { chat: 1, ask: 20, plan: 24, build: 70 } as const;
 const KEEP_RECENT_TOOL_RESULTS = 8;
 
 export function estimateTokens(messages: LanguageModelV4Prompt): number {
@@ -66,15 +67,20 @@ export function budgetNote(stepNumber: number, limit: number): string | null {
   return null;
 }
 
-export function makePrepareStep(opts: { contextWindow: number; mode: "plan" | "build" }) {
-  const limit = STEP_LIMIT[opts.mode];
+export const FINAL_STEP_NOTE =
+  "[Harness] This is the last step of this run, so your tools are off. Write your reply to the user now: what you did, what still remains (if anything), and what they could ask for next. No tool calls.";
+
+export function makePrepareStep(opts: { contextWindow: number; route: keyof typeof STEP_LIMIT }) {
+  const limit = STEP_LIMIT[opts.route];
   const pruneAt = Math.floor(opts.contextWindow * 0.55);
   return ({ stepNumber, steps, messages }: { stepNumber: number; steps: readonly StepLike[]; messages: LanguageModelV4Prompt }) => {
     let next = messages;
     if (estimateTokens(next) > pruneAt) next = pruneToolResults(next);
     if (estimateTokens(next) > pruneAt) next = pruneToolResults(next, 3);
-    const notes = [detectLoop(steps), budgetNote(stepNumber, limit)].filter((n): n is string => Boolean(n));
+    const last = limit > 1 && stepNumber >= limit - 1;
+    const notes = [detectLoop(steps), budgetNote(stepNumber, limit), last ? FINAL_STEP_NOTE : null].filter((n): n is string => Boolean(n));
     if (notes.length) next = [...next, { role: "user", content: [{ type: "text", text: notes.join("\n\n") }] }];
+    if (last) return { messages: next, activeTools: [] as never[] };
     return next === messages ? {} : { messages: next };
   };
 }

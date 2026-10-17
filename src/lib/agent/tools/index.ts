@@ -14,6 +14,24 @@ const ctx = (o: Opts) => ({ toolCallId: o.toolCallId, scope: o.context });
 const toModelOutput = ({ output }: { output: unknown }) => ({ type: "text" as const, value: (output as ToolOutput)?.text ?? JSON.stringify(output) });
 const path = z.string().describe("Path relative to the project root, e.g. src/App.tsx");
 
+// Like OpenCode's question tool and Claude Code's AskUserQuestion, but the turn ends instead
+// of blocking: the user's answer arrives as their next message, so a durable run never waits.
+export const askUserSchema = z.object({
+  questions: z
+    .array(
+      z.object({
+        question: z.string().describe("One short, concrete question"),
+        options: z
+          .array(z.string())
+          .max(5)
+          .optional()
+          .describe("2-4 likely answers. Put the one you recommend first and add \" (Recommended)\" to it. The user can always type their own."),
+      }),
+    )
+    .min(1)
+    .max(4),
+});
+
 export const todoSchema = z.object({
   todos: z
     .array(
@@ -167,8 +185,17 @@ export function buildTools() {
       execute: (input, o) => steps.exploreStep(input, ctx(o as Opts)),
       toModelOutput,
     }),
+    ask_user: tool({
+      description:
+        "Ask the user up to 4 short questions when an answer would change what you build (who it's for, the core flow, a choice between approaches). Offer likely answers as options. Your turn ends here; the answers come in the user's next message. Don't use it for things you can decide sensibly yourself.",
+      inputSchema: askUserSchema,
+      contextSchema: runScopeSchema,
+      execute: (input, o) => steps.askUserStep(input, ctx(o as Opts)),
+      toModelOutput,
+    }),
     propose_plan: tool({
-      description: "Planning mode only: present the plan to the user for approval. Call once, at the end of planning.",
+      description:
+        "Present a complete plan for the user to approve, when the request is a buildable idea. Don't call it for greetings, questions or ideas too vague to plan (ask with ask_user instead), and never with placeholder content.",
       inputSchema: planSchema,
       contextSchema: runScopeSchema,
       execute: (input, o) => steps.proposePlanStep(input, ctx(o as Opts)),
@@ -180,7 +207,9 @@ export function buildTools() {
 export type DaedalusTools = ReturnType<typeof buildTools>;
 export type ToolName = keyof DaedalusTools;
 
-export const PLAN_TOOLS: ToolName[] = ["list_files", "read_file", "glob", "grep", "research", "explore", "propose_plan"];
+/** Tool sets per route. chat has none; ask and plan are read-only; only build changes files. */
+export const ASK_TOOLS: ToolName[] = ["list_files", "read_file", "glob", "grep", "research", "explore", "ask_user"];
+export const PLAN_TOOLS: ToolName[] = ["list_files", "read_file", "glob", "grep", "research", "explore", "ask_user", "propose_plan"];
 export const BUILD_TOOLS: ToolName[] = [
   "list_files",
   "read_file",
@@ -196,4 +225,5 @@ export const BUILD_TOOLS: ToolName[] = [
   "update_todos",
   "research",
   "explore",
+  "ask_user",
 ];

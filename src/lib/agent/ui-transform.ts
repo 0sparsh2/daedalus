@@ -27,6 +27,10 @@ export function createUITransform({
       enqueue(controller, { type: "finish" });
     },
     transform(part, controller) {
+      if (part.type === "message-metadata") {
+        enqueue(controller, part as UIMessageChunk);
+        return;
+      }
       if (typeof part.type === "string" && part.type.startsWith("data-")) {
         enqueue(controller, part as UIMessageChunk);
         return;

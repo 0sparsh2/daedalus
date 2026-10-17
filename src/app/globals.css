@@ -254,6 +254,14 @@ button.chip:hover:not(:disabled) { border-color: var(--muted); }
 .subagent .sa-steps { list-style: none; margin: 0; padding: 0 10px 8px 30px; display: grid; gap: 3px; font-size: 12.5px; color: var(--muted); }
 .subagent .sa-sum { border-top: 1px solid var(--line); padding: 8px 10px; }
 .plan-card { border: 1px solid var(--accent); border-radius: var(--r-3); background: var(--surface); padding: 14px 16px; display: grid; gap: 10px; }
+.chip[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.route-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 500; color: var(--muted); background: var(--sunk); border-radius: 999px; padding: 2px 8px; }
+.qa-card { display: grid; gap: 12px; border: 1px solid var(--line-strong); border-radius: var(--r-3); padding: 14px 16px; background: var(--surface); }
+.qa-q { display: grid; gap: 8px; }
+.qa-question { margin: 0; font-weight: 600; }
+.qa-options { display: flex; flex-wrap: wrap; gap: 6px; }
+.qa-options .chip { min-height: 36px; cursor: pointer; text-align: left; }
+.qa-optlist { margin: 0; font-size: 13px; }
 .plan-card .plan-title { font-size: 17px; font-weight: 650; }
 .plan-card ul, .plan-card ol { margin: 0; padding-left: 20px; display: grid; gap: 3px; font-size: 14px; }
 .plan-actions { display: flex; gap: 8px; flex-wrap: wrap; }

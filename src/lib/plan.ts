@@ -58,3 +58,22 @@ export function normalizePlan(input: unknown): Plan {
     questions: asList(p.questions),
   };
 }
+
+export interface Question {
+  question: string;
+  options: string[];
+}
+
+/** ask_user input as the UI shows it, whatever shape the model sent. */
+export function normalizeQuestions(input: unknown): Question[] {
+  const raw = input && typeof input === "object" ? (input as { questions?: unknown }).questions : undefined;
+  const list = Array.isArray(raw) ? raw : typeof raw === "string" ? asList(raw).map((q) => ({ question: q })) : [];
+  return list
+    .map((q) => {
+      if (typeof q === "string") return { question: q.trim(), options: [] };
+      const o = (q && typeof q === "object" ? q : {}) as Record<string, unknown>;
+      return { question: text(o.question ?? o.text).trim(), options: asList(o.options).slice(0, 6) };
+    })
+    .filter((q) => q.question);
+}
+

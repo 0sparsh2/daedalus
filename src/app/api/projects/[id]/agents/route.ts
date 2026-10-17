@@ -11,10 +11,11 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     const { id } = await ctx.params;
     const project = await getProject(user.id, id);
     const db = supabaseAdmin();
-    const [active, runs, subs] = await Promise.all([
+    const [active, runs, subs, routers] = await Promise.all([
       getActiveModel(user.id),
-      db.from("runs").select("mode,status,input_tokens,output_tokens,llm_calls,tool_calls").eq("project_id", id),
+      db.from("runs").select("mode,route,status,input_tokens,output_tokens,llm_calls,tool_calls").eq("project_id", id),
       db.from("spans").select("name,status,duration_ms").eq("project_id", id).eq("kind", "subagent"),
+      db.from("spans").select("duration_ms,attrs").eq("project_id", id).eq("name", "Router"),
     ]);
     const r = runs.data ?? [];
     const settings = (project as unknown as { settings?: { subagentModel?: string } }).settings ?? {};
@@ -41,6 +42,15 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
         outputTokens: r.reduce((a, x) => a + Number(x.output_tokens ?? 0), 0),
       },
       subagents: { model: subagentModel, research: stat("research sub-agent"), explore: stat("explore sub-agent") },
+      router: {
+        routes: Object.fromEntries((["chat", "ask", "plan", "build"] as const).map((k) => [k, r.filter((x) => x.route === k).length])),
+        byModel: (routers.data ?? []).filter((x) => (x.attrs as { by?: string } | null)?.by === "model").length,
+        byRule: (routers.data ?? []).filter((x) => ["rule", "action"].includes((x.attrs as { by?: string } | null)?.by ?? "")).length,
+        avgModelMs: (() => {
+          const m = (routers.data ?? []).filter((x) => (x.attrs as { by?: string } | null)?.by === "model");
+          return m.length ? Math.round(m.reduce((a, x) => a + (x.duration_ms ?? 0), 0) / m.length) : 0;
+        })(),
+      },
     });
   });
 }

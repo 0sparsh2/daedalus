@@ -32,7 +32,7 @@ type Tab = "preview" | "code" | "trace" | "plan" | "agents";
  * Per-project chat runtime that lives outside React: the transport's callbacks read the
  * current mode and the in-flight workflow run id from here when a request is made.
  */
-const runtimes = new Map<string, { mode: RunMode; workflowRunId: string | null }>();
+const runtimes = new Map<string, { mode: RunMode; workflowRunId: string | null; intent?: "build" | "answer" }>();
 function runtimeFor(projectId: string) {
   let r = runtimes.get(projectId);
   if (!r) {
@@ -52,9 +52,12 @@ function createTransport(projectId: string, hooks: { onRun(runId: string): void;
       if (!res.ok) throw await toApiError(res);
       return res;
     },
-    prepareSendMessagesRequest: ({ messages }) => ({
-      body: { projectId, message: messages[messages.length - 1], mode: rt.mode },
-    }),
+    prepareSendMessagesRequest: ({ messages }) => {
+      // The intent (an explicit action like "Start building") applies to this one message only.
+      const body = { projectId, message: messages[messages.length - 1], mode: rt.mode, intent: rt.intent };
+      rt.intent = undefined;
+      return { body };
+    },
     prepareReconnectToStreamRequest: ({ api: defaultApi }) => ({
       api: rt.workflowRunId ? `/api/chat/${encodeURIComponent(rt.workflowRunId)}/stream` : defaultApi,
     }),
@@ -189,13 +192,14 @@ export function Workspace({
   }, [activeRun, project.id, resumeStream, sendMessage, initialMode]);
 
   const send = useCallback(
-    async (text: string, overrideMode?: RunMode) => {
+    async (text: string, overrideMode?: RunMode, intent?: "build" | "answer") => {
       const t = text.trim();
       if (!t || running) return;
       if (!(await ensureReady({ reason: "Connect a model to keep building." }))) return;
       const useMode = overrideMode ?? mode;
       if (overrideMode) setMode(overrideMode);
       runtimeFor(project.id).mode = useMode;
+      runtimeFor(project.id).intent = intent;
       setRunMode(useMode);
       setBanner(null);
       clearError();
@@ -217,13 +221,14 @@ export function Workspace({
       setBanner({
         kind: "error",
         text: `The preview hit an error: ${e.message.slice(0, 160)}`,
-        action: { label: "Ask Daedalus to fix it", run: () => void send(`The preview shows this error, please fix it:\n\n${e.message}${e.stack ? `\n\n${e.stack.split("\n").slice(0, 6).join("\n")}` : ""}`, "build") },
+        action: { label: "Ask Daedalus to fix it", run: () => void send(`The preview shows this error, please fix it:\n\n${e.message}${e.stack ? `\n\n${e.stack.split("\n").slice(0, 6).join("\n")}` : ""}`, "build", "build") },
       });
     },
     [running, send],
   );
 
-  const startBuild = useCallback(() => void send("Looks good. Build it following the plan.", "build"), [send]);
+  const startBuild = useCallback(() => void send("Looks good. Build it following the plan.", "build", "build"), [send]);
+  const answer = useCallback((text: string) => void send(text, undefined, "answer"), [send]);
 
   // Select-to-edit: the user points at an element in the preview; we prefill a precise reference.
   const onSelect = useCallback((el: SelectedElement) => {
@@ -275,6 +280,7 @@ export function Workspace({
               messages={messages}
               status={status}
               onStartBuild={startBuild}
+              onAnswer={answer}
               onRequestChanges={() => document.getElementById("composer-input")?.focus()}
               onOpenTrace={(id) => {
                 if (id) setTraceRunId(id);

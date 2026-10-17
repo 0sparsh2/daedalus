@@ -20,6 +20,7 @@ interface AgentsInfo {
     outputTokens: number;
   };
   subagents: { model: string | null; research: { calls: number; failed: number; avgMs: number }; explore: { calls: number; failed: number; avgMs: number } };
+  router?: { routes: Record<"chat" | "ask" | "plan" | "build", number>; byModel: number; byRule: number; avgModelMs: number };
 }
 
 const GUARD_RAILS: Array<[IconName, string, string]> = [
@@ -90,6 +91,27 @@ export function AgentsPanel({ projectId, refreshKey, hasSandbox }: { projectId: 
       <section aria-labelledby="team-h" className="agents-sec">
         <h2 id="team-h" className="label">Who works on this project</h2>
         <div className="agent-cards">
+          {info.router && (
+            <article className="agent-card">
+              <div className="agent-h">
+                <span className="agent-ic sub"><Icon name="flow" /></span>
+                <div>
+                  <b>Turn router</b>
+                  <div className="muted" style={{ fontSize: 13 }}>Reads each message first and picks who handles it: chat, answer (read-only), plan or build</div>
+                </div>
+              </div>
+              <dl className="kv">
+                <dt>Turns</dt>
+                <dd>
+                  {info.router.routes.chat} chat · {info.router.routes.ask} answer · {info.router.routes.plan} plan · {info.router.routes.build} build
+                </dd>
+                <dt>Decided by</dt>
+                <dd>
+                  {info.router.byRule} rule or action (free) · {info.router.byModel} fast model{info.router.byModel ? ` (avg ${(info.router.avgModelMs / 1000).toFixed(1)}s)` : ""}
+                </dd>
+              </dl>
+            </article>
+          )}
           <article className="agent-card">
             <div className="agent-h">
               <span className="agent-ic"><Icon name="bolt" /></span>

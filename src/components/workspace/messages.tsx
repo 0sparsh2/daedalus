@@ -5,7 +5,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Icon } from "@/components/icons";
 import { PartBoundary } from "./part-boundary";
-import { CheckLine, CheckpointLine, PlanCard, SubagentCard, ToolCard, ExploreGroup, type ToolPart, type SubagentData } from "./tool-cards";
+import { CheckLine, CheckpointLine, PlanCard, QuestionsCard, RouteChip, SubagentCard, ToolCard, ExploreGroup, type ToolPart, type SubagentData } from "./tool-cards";
 
 type Part = UIMessage["parts"][number] & { type: string; [key: string]: unknown };
 
@@ -15,12 +15,14 @@ export function Messages({
   messages,
   status,
   onStartBuild,
+  onAnswer,
   onRequestChanges,
   onOpenTrace,
 }: {
   messages: UIMessage[];
   status: string;
   onStartBuild(): void;
+  onAnswer(text: string): void;
   onRequestChanges(): void;
   onOpenTrace(runId?: string): void;
 }) {
@@ -64,6 +66,7 @@ export function Messages({
             live={live && i === messages.length - 1}
             onStartBuild={onStartBuild}
             onRequestChanges={onRequestChanges}
+            onAnswer={onAnswer}
             onOpenTrace={onOpenTrace}
             isLatest={i === messages.length - 1}
           />
@@ -84,6 +87,7 @@ function AssistantMessage({
   live,
   isLatest,
   onStartBuild,
+  onAnswer,
   onRequestChanges,
   onOpenTrace,
 }: {
@@ -91,6 +95,7 @@ function AssistantMessage({
   live: boolean;
   isLatest: boolean;
   onStartBuild(): void;
+  onAnswer(text: string): void;
   onRequestChanges(): void;
   onOpenTrace(runId?: string): void;
 }) {
@@ -99,6 +104,7 @@ function AssistantMessage({
   const subagents = new Map<string, SubagentData>();
   for (const p of parts) if (p.type === "data-subagent" && typeof p.id === "string") subagents.set(p.id, p.data as SubagentData);
   const status = [...parts].reverse().find((p) => p.type === "data-status")?.data as { stage: string; note: string } | undefined;
+  const route = (message.metadata as { route?: { route: string; by: string; reason: string } } | undefined)?.route;
 
   // Group consecutive read-only tool calls into one "Explored" line.
   const blocks: Array<{ kind: "part"; part: Part; key: string } | { kind: "explore"; parts: ToolPart[]; key: string }> = [];
@@ -135,6 +141,9 @@ function AssistantMessage({
         </details>
       );
     }
+    if (p.type === "tool-ask_user") {
+      return <QuestionsCard key={b.key} part={p as unknown as ToolPart} canAnswer={isLatest && !live} onAnswer={onAnswer} />;
+    }
     if (p.type === "tool-propose_plan") {
       return <PlanCard key={b.key} part={p as unknown as ToolPart} canBuild={isLatest && !live} onStartBuild={onStartBuild} onRequestChanges={onRequestChanges} />;
     }
@@ -160,6 +169,7 @@ function AssistantMessage({
     <div className="msg-ai">
       <div className="who">
         <span className="brand-mark" style={{ width: 16, height: 16 }} aria-hidden="true" /> Daedalus
+        {route && <RouteChip data={route} />}
         {runId && (
           <button className="btn ghost sm" style={{ marginLeft: "auto" }} onClick={() => onOpenTrace(runId)} title="See every model call and tool call in this run">
             <Icon name="flow" size={13} /> Trace
