@@ -12,7 +12,7 @@ import { activeRun, createProject, getProject, loadMessages, nameFromPrompt } fr
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { agentRun } from "@/workflows/agent-run";
 
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 const bodySchema = z.object({
   projectId: z.string().uuid().optional(),
