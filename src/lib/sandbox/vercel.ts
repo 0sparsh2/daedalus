@@ -87,6 +87,16 @@ class VercelSandbox implements SandboxHandle {
     if (left < ms) await this.sbx.extendTimeout(ms - Math.max(left, 0)).catch(() => {});
   }
 
+  /** The firewall: only the allowed domains are reachable. Applied to running sandboxes too. */
+  async applyNetworkPolicy(policy: { allow: string[] } | "allow-all") {
+    const current = this.sbx.networkPolicy;
+    const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+    const normalized = (p: unknown) => (p && typeof p === "object" && Array.isArray((p as { allow?: unknown }).allow) ? { allow: [...(p as { allow: string[] }).allow].sort() } : p);
+    if (same(normalized(current), normalized(policy))) return "unchanged" as const;
+    await this.sbx.update({ networkPolicy: policy });
+    return "applied" as const;
+  }
+
   async stop() {
     await this.sbx.stop();
   }

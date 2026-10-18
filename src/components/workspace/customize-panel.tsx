@@ -5,6 +5,7 @@ import { ApiError, api } from "@/lib/client/api";
 import { describeRule, type Rule, type RulePreset } from "@/lib/rules";
 import type { Suggestion as SuggestionData } from "@/lib/suggestions";
 import { SuggestionView } from "./tool-cards";
+import { defaultPolicy, isReadOnly, type ToolPolicy } from "@/lib/mcp/policy";
 
 export type Section = "kits" | "connections" | "skills" | "rules" | "memory" | "improve";
 
@@ -390,13 +391,16 @@ function RulesSection({ projectId, refreshKey }: { projectId: string; refreshKey
   );
 }
 
+const POLICY_LABEL: Record<ToolPolicy, string> = { allow: "Allow", ask: "Ask each time", block: "Block" };
+
 interface ConnectionInfo {
   id: string;
   name: string;
   url: string;
   read_only: boolean;
   enabled: boolean;
-  tools: Array<{ name: string; description: string; readOnly: boolean }>;
+  tools: Array<{ name: string; description: string; readOnly: boolean; destructive?: boolean }>;
+  tool_policies?: Record<string, ToolPolicy>;
   status: "ok" | "error";
   error: string | null;
 }
@@ -439,7 +443,7 @@ function ConnectionsSection({ projectId }: { projectId: string }) {
     }
   }
 
-  async function patch(id: string, body: Record<string, boolean>) {
+  async function patch(id: string, body: Record<string, unknown>) {
     setBusy(id);
     const r = await api<{ ok: boolean; error?: string }>(`/api/projects/${projectId}/connections`, { method: "PATCH", json: { id, ...body } }).catch(() => null);
     if (r && r.ok === false && r.error) setError(r.error);
@@ -460,7 +464,7 @@ function ConnectionsSection({ projectId }: { projectId: string }) {
         <h2 id="conn-h" className="label">Connections</h2>
         <p className="muted" style={{ margin: 0, fontSize: 14 }}>
           Connect services through MCP, the open standard for giving agents tools. Daedalus calls them from its own server, never from your app&apos;s
-          sandbox, and every call shows in the trace. Tools that only read data work in any turn; tools that change things only while building.
+          sandbox, and every call shows in the trace. Tools that only read data work in any turn; tools that change things only while building, and they ask you first unless you allow them.
         </p>
         <div style={{ display: "grid", gap: 8 }}>
           {list.connections.map((c) => (
@@ -481,17 +485,37 @@ function ConnectionsSection({ projectId }: { projectId: string }) {
               </label>
               {open === c.id && (
                 <ul style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 4, fontSize: 13 }}>
-                  {c.tools.map((t) => (
-                    <li key={t.name}>
-                      <span className="mono">{t.name}</span>
-                      {(t.readOnly || c.read_only) && <span className="muted"> · read-only</span>}
-                      <div className="muted">{t.description.slice(0, 200)}</div>
-                    </li>
-                  ))}
+                  {c.tools.map((t) => {
+                    const fallback = defaultPolicy(t, c.read_only);
+                    const set = c.tool_policies?.[t.name];
+                    return (
+                      <li key={t.name} style={{ display: "grid", gap: 2 }}>
+                        <span style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                          <span className="mono">{t.name}</span>
+                          {isReadOnly(t, c.read_only) && <span className="muted">· read-only</span>}
+                          {t.destructive && <span className="muted">· the server marks it destructive</span>}
+                          <label className="sr-only" htmlFor={`pol-${c.id}-${t.name}`}>Permission for {t.name}</label>
+                          <select
+                            id={`pol-${c.id}-${t.name}`}
+                            className="select"
+                            style={{ marginLeft: "auto", width: "auto", flex: "0 0 auto", minHeight: 30, padding: "2px 8px", fontSize: 13 }}
+                            value={set ?? "default"}
+                            onChange={(e) => void patch(c.id, { toolPolicies: { [t.name]: e.target.value } })}
+                          >
+                            <option value="default">Default ({POLICY_LABEL[fallback]})</option>
+                            <option value="allow">{POLICY_LABEL.allow}</option>
+                            <option value="ask">{POLICY_LABEL.ask}</option>
+                            <option value="block">{POLICY_LABEL.block}</option>
+                          </select>
+                        </span>
+                        <span className="muted">{t.description.slice(0, 200)}</span>
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                <button className="btn sm" aria-expanded={open === c.id} onClick={() => setOpen(open === c.id ? null : c.id)}>{open === c.id ? "Hide tools" : "Show tools"}</button>
+                <button className="btn sm" aria-expanded={open === c.id} onClick={() => setOpen(open === c.id ? null : c.id)}>{open === c.id ? "Hide tools" : "Tools and permissions"}</button>
                 <button className="btn sm" disabled={busy === c.id} onClick={() => void patch(c.id, { refresh: true })}>{busy === c.id && <span className="spin" />} Check again</button>
                 <button className="btn sm ghost" onClick={() => void remove(c.id)} aria-label={`Remove ${c.name}`}>Remove</button>
               </div>
@@ -547,7 +571,77 @@ function ConnectionsSection({ projectId }: { projectId: string }) {
           </div>
         </div>
       </section>
+      <NetworkSection projectId={projectId} />
     </>
+  );
+}
+
+/** What the project's sandbox may reach on the internet (lib/sandbox/network.ts). */
+function NetworkSection({ projectId }: { projectId: string }) {
+  const [info, setInfo] = useState<{ defaults: string[]; domains: string[]; enforced: boolean; provider: string } | null>(null);
+  const [draft, setDraft] = useState("");
+  const [note, setNote] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api<{ defaults: string[]; domains: string[]; enforced: boolean; provider: string }>(`/api/projects/${projectId}/network`)
+      .then((r) => !cancelled && setInfo(r))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId]);
+
+  async function save(domains: string[]) {
+    setNote(null);
+    await api<{ domains: string[] }>(`/api/projects/${projectId}/network`, { method: "PUT", json: { domains } })
+      .then((r) => {
+        setInfo((i) => (i ? { ...i, domains: r.domains } : i));
+        setDraft("");
+      })
+      .catch((e) => setNote(e instanceof ApiError ? e.message : "Couldn't save"));
+  }
+
+  return (
+    <section aria-labelledby="net-h" className="agents-sec">
+      <h2 id="net-h" className="label">Internet access from the sandbox</h2>
+      <p className="muted" style={{ margin: 0, fontSize: 14, maxWidth: 720 }}>
+        Your app&apos;s own API calls run in the browser preview, so the sandbox only needs to install packages. It can reach npm and GitHub; add a domain
+        here if server-side code in your app calls an API.
+      </p>
+      {info === null ? (
+        <span className="spin" />
+      ) : (
+        <>
+          {!info.enforced && (
+            <p className="hint" style={{ margin: 0 }}>
+              {info.provider === "docker" ? "Local Docker sandboxes aren't restricted; the list applies when the project runs on Vercel Sandbox." : "Not enforced: SANDBOX_NETWORK is set to open."}
+            </p>
+          )}
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {info.defaults.map((d) => (
+              <span key={d} className="route-chip mono" title="Always allowed">{d}</span>
+            ))}
+            {info.domains.map((d) => (
+              <span key={d} className="route-chip mono">
+                {d}
+                <button className="iconbtn" style={{ width: 18, height: 18 }} aria-label={`Remove ${d}`} onClick={() => void save(info.domains.filter((x) => x !== d))}>
+                  <Icon name="x" size={11} />
+                </button>
+              </span>
+            ))}
+          </div>
+          <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap", maxWidth: 720 }}>
+            <label className="field" style={{ flex: 1, minWidth: 220 }}>
+              <span>Add a domain</span>
+              <input className="input mono" placeholder="api.openweathermap.org" value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === "Enter" && draft.trim() && void save([...info.domains, draft.trim()])} />
+            </label>
+            <button className="btn" disabled={!draft.trim()} onClick={() => void save([...info.domains, draft.trim()])}>Add</button>
+          </div>
+          {note && <p className="hint" role="alert" style={{ margin: 0, color: "var(--risk)" }}>{note}</p>}
+        </>
+      )}
+    </section>
   );
 }
 

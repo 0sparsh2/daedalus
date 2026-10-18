@@ -1,5 +1,6 @@
 import "server-only";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { findSecret } from "@/lib/redact";
 
 /**
  * Memory the user controls. The agent can only *propose* a memory (the remember tool); it
@@ -44,6 +45,9 @@ export async function memoryContext(userId: string, projectId: string): Promise<
 
 export async function proposeMemory(input: { userId: string; projectId: string; runId: string; text: string; scope: "project" | "me" }) {
   const text = input.text.replace(/\s+/g, " ").trim().slice(0, 500);
+  // A memory is loaded into every prompt from now on: never one that holds a key or password.
+  const secret = findSecret(text);
+  if (secret) throw new Error(`Not proposed: it contains ${secret}. Never store secrets in memory; say where the secret is kept instead (for example "the API key is in .env as WEATHER_API_KEY").`);
   const db = supabaseAdmin();
   // The same fact twice is one memory.
   const { data: existing } = await db.from("memories").select("id,status").eq("user_id", input.userId).eq("text", text).neq("status", "dismissed").limit(1).maybeSingle();

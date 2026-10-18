@@ -141,6 +141,11 @@ class DockerSandbox implements SandboxHandle {
 
   async keepAlive() {}
 
+  /** Not enforced locally: an internal Docker network would also block the published preview port. */
+  async applyNetworkPolicy() {
+    return "unsupported" as const;
+  }
+
   async stop() {
     await docker(["stop", "-t", "2", this.name]);
   }

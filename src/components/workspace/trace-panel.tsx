@@ -31,6 +31,8 @@ interface Span {
   input: unknown;
   output: unknown;
   error: string | null;
+  /** Set when retention cleared the span's input and output. */
+  pruned_at?: string | null;
 }
 
 /**
@@ -200,6 +202,11 @@ function SpanDetail({ span }: { span: Span }) {
         ))}
       </dl>
       {span.error && <div className="error-text">{span.error}</div>}
+      {span.pruned_at && (
+        <p className="hint" style={{ margin: 0 }}>
+          Inputs and outputs were cleared on {new Date(span.pruned_at).toLocaleDateString()}: traces keep their details for a limited time. Timing, status, tokens and errors stay.
+        </p>
+      )}
       {span.input != null && (
         <div>
           <div className="label">Input</div>

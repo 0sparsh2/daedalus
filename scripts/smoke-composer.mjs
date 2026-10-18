@@ -147,6 +147,29 @@ await page.locator(".msg-ai").last().locator(".route-chip").first().waitFor({ ti
 check("the Improve button starts a review", (await page.locator(".msg-ai").last().locator(".route-chip").first().innerText()).includes("Review"));
 await page.getByRole("button", { name: "Send" }).waitFor({ timeout: 180_000 });
 
+// Connection permissions: the per-tool select, then an approval card in the chat
+await page.getByRole("tab", { name: "Customize" }).click();
+await page.getByRole("group", { name: "Customize sections" }).getByRole("button", { name: "Connections" }).click();
+await page.getByLabel("Name").fill("deepwiki");
+await page.getByLabel("Server address").fill("https://mcp.deepwiki.com/mcp");
+await page.getByRole("button", { name: /Connect and list its tools/ }).click();
+await page.getByRole("button", { name: "Tools and permissions" }).first().click({ timeout: 60_000 });
+const perm = page.getByLabel("Permission for read_wiki_structure");
+check("each tool has a permission, defaulting to Ask for unannotated tools", (await perm.inputValue()) === "default" && (await perm.locator("option:checked").innerText()).includes("Ask each time"), await perm.locator("option:checked").innerText());
+await page.screenshot({ path: `${OUT}/07-permissions.png` });
+await page.getByRole("group", { name: "Run mode" }).getByRole("button", { name: "Build" }).click();
+await box.fill("[mock:mcp-build] Read the wiki");
+await box.press("Escape");
+await box.press("Enter");
+const approval = page.getByRole("group", { name: "Approve deepwiki read_wiki_structure" });
+await approval.waitFor({ timeout: 120_000 });
+check("an ask tool shows an approval card with its arguments", (await approval.innerText()).includes("vercel/ai"));
+await page.screenshot({ path: `${OUT}/08-approval.png` });
+await approval.getByRole("button", { name: "Allow once" }).click();
+await page.getByText(/read_wiki_structure: Allowed once/).waitFor({ timeout: 120_000 });
+await page.getByRole("button", { name: "Send" }).waitFor({ timeout: 120_000 });
+check("Allow once lets the run carry on", (await page.locator(".msg-ai").last().innerText()).includes("Got it"));
+
 check("no page errors", errors.length === 0, errors.join(" | ").slice(0, 200));
 
 await browser.close();

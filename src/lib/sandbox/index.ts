@@ -6,6 +6,7 @@ import { importRepo, type GithubSource } from "./importer";
 import { TEMPLATE_FILES } from "./template-files";
 import { sandboxNameFor, type SandboxHandle, type SandboxProvider } from "./types";
 import { vercelProvider } from "./vercel";
+import { sandboxNetworkPolicy } from "./network";
 
 export * from "./types";
 
@@ -24,6 +25,14 @@ export type ProvisionEvent = { stage: "sandbox" | "template" | "import" | "insta
  * crash (or a durable-step replay) simply continues: create or resume the VM, lay down the
  * starter app, install dependencies, initialise git, start the dev server.
  */
+/** Applies the project's sandbox internet allowlist (defaults plus the domains it added). */
+export async function applyProjectNetwork(projectId: string, handle: SandboxHandle) {
+  if (!handle.applyNetworkPolicy) return "unsupported" as const;
+  const { data } = await supabaseAdmin().from("projects").select("settings").eq("id", projectId).maybeSingle();
+  const extra = ((data?.settings ?? {}) as { sandboxDomains?: string[] }).sandboxDomains ?? [];
+  return handle.applyNetworkPolicy(sandboxNetworkPolicy(extra));
+}
+
 export async function ensureProjectSandbox(
   projectId: string,
   onProgress: (e: ProvisionEvent) => void | Promise<void> = () => {},
@@ -33,6 +42,7 @@ export async function ensureProjectSandbox(
   await onProgress({ stage: "sandbox", note: `Starting ${provider.name === "vercel" ? "Vercel Sandbox microVM" : "Docker sandbox"}` });
   const { handle, created } = await provider.getOrCreate(name, { projectId, ports: [PREVIEW_PORT] });
   await handle.keepAlive(20 * 60_000);
+  await applyProjectNetwork(projectId, handle);
 
   const provisioned = await handle.exec(`test -f ${MARKER} && echo yes || echo no`, { timeoutMs: 20_000 });
   if (provisioned.stdout.trim() !== "yes") {

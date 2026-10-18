@@ -11,6 +11,8 @@ import { finalCheckStep, finishRunStep, isCancelledStep, pointedSummary, startRu
 import type { RunScope } from "@/lib/agent/scope";
 import { ASK_TOOLS, BUILD_TOOLS, PLAN_TOOLS, REVIEW_TOOLS, buildTools, type ToolName } from "@/lib/agent/tools";
 import { mcpToolStep } from "@/lib/agent/tools/steps";
+import { offeredIn } from "@/lib/mcp/policy";
+import { approvalGate, approvalNote } from "./approval";
 import { stepsToParts, type PlainPart } from "@/lib/agent/ui-parts";
 import { GatewayModel } from "@/lib/llm/gateway-model";
 import type { AnyProviderId } from "@/lib/llm/providers";
@@ -81,8 +83,9 @@ export async function agentRun(input: AgentRunInput) {
   const profile = PROFILES[route];
   const builtIn = buildTools();
   const toolsContext = Object.fromEntries(Object.keys(builtIn).map((k) => [k, scope])) as Record<ToolName, RunScope>;
-  // Connected MCP servers' tools: all of them in build turns, read-only ones elsewhere, none in chat or review.
-  const mcp = route === "chat" || route === "review" ? [] : (context.connections ?? []).filter((d) => route === "build" || d.readOnly);
+  // Connected MCP servers' tools: all of them in build turns, read-only ones elsewhere, none in
+  // chat or review, never a blocked one. "ask" tools wait for the user's approval first.
+  const mcp = (context.connections ?? []).filter((d) => offeredIn(route, d.policy ?? (d.readOnly ? "allow" : "ask"), d.readOnly));
   const tools: ToolSet = {
     ...builtIn,
     ...Object.fromEntries(
@@ -91,7 +94,13 @@ export async function agentRun(input: AgentRunInput) {
         tool({
           description: d.description,
           inputSchema: jsonSchema(d.inputSchema as JSONSchema7),
-          execute: (args, o) => mcpToolStep({ connectionId: d.connectionId, connection: d.connection, tool: d.tool, args: (args ?? {}) as Record<string, unknown>, readOnly: d.readOnly }, { toolCallId: o.toolCallId, scope }),
+          execute: async (args, o) => {
+            const call = { connectionId: d.connectionId, connection: d.connection, tool: d.tool, args: (args ?? {}) as Record<string, unknown>, readOnly: d.readOnly };
+            if (d.policy !== "ask") return mcpToolStep(call, { toolCallId: o.toolCallId, scope });
+            const decision = await approvalGate(scope, { toolCallId: o.toolCallId, connectionId: d.connectionId, connection: d.connection, tool: d.tool, args: call.args });
+            if (decision !== "approved" && decision !== "always") return { ok: false, text: approvalNote(decision, d.tool), approval: decision };
+            return { ...(await mcpToolStep(call, { toolCallId: o.toolCallId, scope })), approval: decision };
+          },
         }),
       ]),
     ),

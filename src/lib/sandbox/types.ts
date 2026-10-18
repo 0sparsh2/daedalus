@@ -45,6 +45,11 @@ export interface SandboxHandle {
   previewUrl(port: number): Promise<string>;
   /** Keep the sandbox alive while an agent is working (no-op where not needed). */
   keepAlive(ms: number): Promise<void>;
+  /**
+   * Limits the sandbox's internet access to these domains (lib/sandbox/network.ts). Returns
+   * whether it changed anything; "unsupported" where the provider can't enforce it (Docker).
+   */
+  applyNetworkPolicy?(policy: { allow: string[] } | "allow-all"): Promise<"applied" | "unchanged" | "unsupported">;
   stop(): Promise<void>;
 }
 

@@ -1,6 +1,7 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { isSecretKey, redactText } from "@/lib/redact";
 
 export type SpanKind = "run" | "llm" | "tool" | "subagent" | "sandbox" | "verify" | "system";
 export type SpanStatus = "running" | "ok" | "error" | "cancelled";
@@ -24,10 +25,17 @@ export interface SpanStartInput extends SpanScope {
 const MAX_STRING = 4_000;
 const MAX_ITEMS = 60;
 
-/** Keeps span payloads small: long strings, arrays and deep objects are trimmed. */
+/**
+ * Keeps span payloads small and free of secrets: long strings, arrays and deep objects are
+ * trimmed, and keys or tokens are masked (lib/redact.ts) before anything is trimmed, so a key cut
+ * at the limit can't slip through half-matched.
+ */
 export function clip(value: unknown, depth = 0): unknown {
   if (value == null) return value;
-  if (typeof value === "string") return value.length > MAX_STRING ? `${value.slice(0, MAX_STRING)}… [${value.length - MAX_STRING} more chars]` : value;
+  if (typeof value === "string") {
+    const s = redactText(value);
+    return s.length > MAX_STRING ? `${s.slice(0, MAX_STRING)}… [${s.length - MAX_STRING} more chars]` : s;
+  }
   if (typeof value !== "object") return value;
   if (depth > 5) return "[…]";
   if (Array.isArray(value)) {
@@ -35,7 +43,7 @@ export function clip(value: unknown, depth = 0): unknown {
     return value.length > MAX_ITEMS ? [...items, `[${value.length - MAX_ITEMS} more]`] : items;
   }
   const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(value as Record<string, unknown>)) out[k] = clip(v, depth + 1);
+  for (const [k, v] of Object.entries(value as Record<string, unknown>)) out[k] = typeof v === "string" && v.length >= 6 && isSecretKey(k) ? "[REDACTED]" : clip(v, depth + 1);
   return out;
 }
 
@@ -69,7 +77,7 @@ export async function endSpan(
     status: end.status,
     ended_at: endedAt.toISOString(),
     output: clip(end.output ?? null),
-    error: end.error ? end.error.slice(0, MAX_STRING) : null,
+    error: end.error ? redactText(end.error).slice(0, MAX_STRING) : null,
   };
   if (end.startedAt) patch.duration_ms = endedAt.getTime() - end.startedAt.getTime();
   if (end.attrs) {
@@ -106,7 +114,7 @@ export async function recordSpan(
       attrs: clip(s.attrs ?? {}),
       input: clip(s.input ?? null),
       output: clip(s.output ?? null),
-      error: s.error ? s.error.slice(0, MAX_STRING) : null,
+      error: s.error ? redactText(s.error).slice(0, MAX_STRING) : null,
     });
   if (error) console.error("[trace] recordSpan failed", error.message);
 }

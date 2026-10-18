@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { describeRule, ruleSchema, type Rule, type RulePreset } from "./rules";
 import { validateSkill, type Skill } from "./skills/skill-file";
+import { findSecret } from "./redact";
 
 /**
  * Suggestions: what the agent learned, in the form that costs least. Text that is always in
@@ -35,6 +36,9 @@ export type Suggestion =
 /** Checks a suggestion and returns its stored form, or a message the agent can act on. */
 export function normalizeSuggestion(input: SuggestInput): Suggestion | { error: string } {
   const evidence = input.evidence.trim();
+  // Skills land in the repo and rules run every time: neither may carry a key or password.
+  const secret = findSecret([input.description, input.instructions ?? "", input.command ?? "", input.pattern ?? "", evidence].join("\n"));
+  if (secret) return { error: `Not suggested: it contains ${secret}. Never put secrets in skills or rules; refer to an environment variable instead.` };
   if (input.kind === "skill") {
     const skill: Skill = { name: input.name.trim().toLowerCase(), description: input.description.trim(), body: (input.instructions ?? "").trim() };
     const problem = validateSkill(skill);

@@ -49,6 +49,7 @@ for kv in \
   "SUPABASE_SECRET_KEY=<secret key>" \
   "CREDENTIALS_ENCRYPTION_KEY=$(openssl rand -base64 32)" \
   "GATEWAY_TOKEN_SECRET=$(openssl rand -hex 32)" \
+  "CRON_SECRET=$(openssl rand -hex 24)" \
   "SANDBOX_PROVIDER=vercel" \
   "NEXT_PUBLIC_AUTH_PROVIDERS=github,google,email" \
   "NEXT_PUBLIC_APP_URL=https://<your-domain>" \
@@ -62,6 +63,8 @@ vercel --prod
 
 - **Keep the encryption key safe.** Changing `CREDENTIALS_ENCRYPTION_KEY` later makes stored keys undecryptable, and users would have to re-enter them.
 - **Sandbox auth** uses OIDC automatically on Vercel; there's no token to set.
+- **Sandbox internet access** is limited to npm, GitHub and each project's added domains (Customize → Connections). `SANDBOX_NETWORK=open` lifts it if a deployment needs to.
+- **Trace retention:** `vercel.json` schedules `/api/cron/retention` daily. Vercel Cron sends `CRON_SECRET` as a bearer token; without it the route refuses to run. Span inputs and outputs older than `TRACE_RETENTION_DAYS` (default 30) are cleared; messages and versions are never deleted.
 - **Web search for research:** set `TAVILY_API_KEY` (free tier: 1,000 searches a month, no card). SearXNG is free too but has to be hosted somewhere with a stable IP; point `SEARXNG_URL` at it if you run one. Without either, research falls back to DuckDuckGo (often blocked from cloud IPs) and then npm and GitHub search.
 - **Optional, faster cold starts:** run `vercel env pull .env.vercel.local && node --env-file=.env.vercel.local scripts/build-template-snapshot.mjs`, then set `VERCEL_TEMPLATE_SNAPSHOT_ID` to the printed id. (Pull into a separate file: `.env.local` holds your local secrets.)
 - **Preview deployments** are protected by Vercel Authentication. To run agents on them, enable *Protection Bypass for Automation*; `VERCEL_AUTOMATION_BYPASS_SECRET` is then forwarded on gateway calls.

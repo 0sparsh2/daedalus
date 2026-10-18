@@ -44,6 +44,8 @@ async function turn(projectId, text, mode = "build", intent) {
       if (e.type === "data-check" && e.data?.status !== "running") checks.push(e.data);
       if (e.type === "text-delta") said += e.delta;
       if (e.type === "message-metadata" && e.messageMetadata?.route) route = e.messageMetadata.route.route;
+      // Connection tools that may change things ask first; approve them as the user would.
+      if (e.type === "data-approval" && e.data?.status === "waiting") void call("POST", `/api/runs/${res.headers.get("x-daedalus-run-id")}/approvals`, { toolCallId: e.data.toolCallId, decision: "approved" });
     }
   }
   return { projectId: projId, tools, checks, said, route };

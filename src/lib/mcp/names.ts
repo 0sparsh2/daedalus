@@ -16,7 +16,10 @@ export interface McpToolDescriptor {
   tool: string;
   description: string;
   inputSchema: Record<string, unknown>;
+  /** Safe for read-only turns: read-only by hint or by the user's say-so, and not destructive. */
   readOnly: boolean;
+  /** allow, ask (the run waits for the user's approval) or block; see lib/mcp/policy.ts. */
+  policy: "allow" | "ask" | "block";
 }
 
 /** At most this many connection tools per run, so a large server can't flood the prompt. */

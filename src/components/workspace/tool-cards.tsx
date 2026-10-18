@@ -148,6 +148,14 @@ export function ToolCard({ part }: { part: ToolPart }) {
       body = o.text ? <pre className="codeblock">{String(o.text)}</pre> : null;
   }
 
+  if (typeof o.approval === "string" && name.startsWith("mcp__")) {
+    meta = (
+      <>
+        {meta}
+        <span className="muted" style={{ marginLeft: 8, fontSize: 12 }}>{APPROVAL_DONE[o.approval] ?? ""}</span>
+      </>
+    );
+  }
   if (typeof o.injection === "string") {
     meta = (
       <>
@@ -484,6 +492,63 @@ export function MemoryCard({ part, status, onDecide }: { part: ToolPart; status?
   );
 }
 
+
+export interface ApprovalData {
+  toolCallId: string;
+  connection: string;
+  tool: string;
+  args: Record<string, unknown>;
+  status: "waiting" | "approved" | "always" | "denied" | "stopped" | "expired";
+}
+
+const APPROVAL_DONE: Record<string, string> = {
+  approved: "Allowed once",
+  always: "Allowed, and always allowed from now on",
+  denied: "Declined",
+  stopped: "Stopped",
+  expired: "No answer within 15 minutes, so it wasn't made",
+};
+
+/** A connection tool waiting for the user's go-ahead (its permission is "Ask each time"). */
+export function ApprovalCard({ data, runId }: { data: ApprovalData; runId?: string }) {
+  const [sent, setSent] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const args = JSON.stringify(data.args ?? {}, null, 2);
+  async function decide(decision: "approved" | "always" | "denied") {
+    if (!runId) return;
+    setSent(decision);
+    setError(null);
+    const r = await fetch(`/api/runs/${runId}/approvals`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ toolCallId: data.toolCallId, decision }) });
+    if (!r.ok) {
+      setSent(null);
+      setError(((await r.json().catch(() => null)) as { error?: { message?: string } } | null)?.error?.message ?? "Couldn't send that");
+    }
+  }
+  if (data.status !== "waiting") {
+    return (
+      <div className="status-line">
+        <Icon name={data.status === "approved" || data.status === "always" ? "check" : "x"} size={13} /> {data.connection} · <span className="mono">{data.tool}</span>: {APPROVAL_DONE[data.status]}
+      </div>
+    );
+  }
+  return (
+    <div className="suggest-card" role="group" aria-label={`Approve ${data.connection} ${data.tool}`}>
+      <span className="muted" style={{ fontSize: 12.5, display: "flex", gap: 6, alignItems: "center" }}>
+        <Icon name="shield" size={13} /> Waiting for your approval
+      </span>
+      <span>
+        Daedalus wants to use <b className="mono">{data.tool}</b> on <b>{data.connection}</b>.
+      </span>
+      {args !== "{}" && <pre className="suggest-body" style={{ marginTop: 0 }}>{args.slice(0, 2000)}</pre>}
+      <span style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+        <button className="btn sm primary" disabled={Boolean(sent)} onClick={() => void decide("approved")}>{sent === "approved" && <span className="spin" />} Allow once</button>
+        <button className="btn sm" disabled={Boolean(sent)} onClick={() => void decide("always")}>{sent === "always" && <span className="spin" />} Always allow</button>
+        <button className="btn sm ghost" disabled={Boolean(sent)} onClick={() => void decide("denied")}>Deny</button>
+        {error && <span className="hint" role="alert" style={{ color: "var(--risk)" }}>{error}</span>}
+      </span>
+    </div>
+  );
+}
 
 /** A suggested skill or rule, with Keep and Discard. Shared by the chat card and Customize → Improve. */
 export function SuggestionView({

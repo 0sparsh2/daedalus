@@ -4,6 +4,7 @@ import { assertPublic } from "@/lib/agent/tools/web";
 import { decryptSecret, encryptSecret } from "@/lib/crypto";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { MAX_MCP_TOOLS, mcpToolKey, type McpToolDescriptor } from "./names";
+import { isReadOnly, policyFor, type ToolPolicy } from "./policy";
 
 /**
  * Connections: MCP servers a project's agent can use, called from Daedalus's server (never
@@ -15,6 +16,8 @@ export interface CachedTool {
   description: string;
   inputSchema: Record<string, unknown>;
   readOnly: boolean;
+  /** The server marks the tool destructive (MCP destructiveHint). */
+  destructive?: boolean;
 }
 
 export interface ConnectionRow {
@@ -24,6 +27,7 @@ export interface ConnectionRow {
   read_only: boolean;
   enabled: boolean;
   tools: CachedTool[];
+  tool_policies: Record<string, ToolPolicy>;
   status: "ok" | "error";
   error: string | null;
   checked_at: string | null;
@@ -68,6 +72,7 @@ export async function discoverTools(url: string, token?: string): Promise<Cached
       description: (t.description ?? t.annotations?.title ?? t.name).slice(0, 1024),
       inputSchema: (t.inputSchema ?? { type: "object", properties: {} }) as Record<string, unknown>,
       readOnly: t.annotations?.readOnlyHint === true,
+      destructive: t.annotations?.destructiveHint === true,
     }));
   } finally {
     await client.close().catch(() => {});
@@ -79,7 +84,7 @@ const secretOf = (row: { secret_ciphertext?: string | null }, userId: string) =>
 export async function listConnections(projectId: string): Promise<ConnectionRow[]> {
   const { data } = await supabaseAdmin()
     .from("connections")
-    .select("id,name,url,read_only,enabled,tools,status,error,checked_at,created_at")
+    .select("id,name,url,read_only,enabled,tools,tool_policies,status,error,checked_at,created_at")
     .eq("project_id", projectId)
     .order("created_at");
   return (data ?? []) as ConnectionRow[];
@@ -129,17 +134,36 @@ export async function connectionTools(projectId: string): Promise<McpToolDescrip
   const out: McpToolDescriptor[] = [];
   for (const c of (await listConnections(projectId)).filter((c) => c.enabled && c.status === "ok")) {
     for (const t of c.tools) {
+      const policy = policyFor(t.name, t, c.read_only, c.tool_policies);
+      if (policy === "block") continue;
       if (out.length >= MAX_MCP_TOOLS) return out;
-      out.push({ key: mcpToolKey(c.name, t.name), connectionId: c.id, connection: c.name, tool: t.name, description: `[${c.name}] ${t.description}`, inputSchema: t.inputSchema, readOnly: t.readOnly || c.read_only });
+      out.push({ key: mcpToolKey(c.name, t.name), connectionId: c.id, connection: c.name, tool: t.name, description: `[${c.name}] ${t.description}`, inputSchema: t.inputSchema, readOnly: isReadOnly(t, c.read_only), policy });
     }
   }
   return out;
 }
 
+/** Sets per-tool policies; "default" clears a tool's entry so it follows its annotations again. */
+export async function setToolPolicies(userId: string, projectId: string, id: string, changes: Record<string, ToolPolicy | "default">) {
+  const db = supabaseAdmin();
+  const { data: row } = await db.from("connections").select("tool_policies").eq("id", id).eq("project_id", projectId).eq("user_id", userId).maybeSingle();
+  if (!row) throw new Error("No such connection");
+  const next: Record<string, ToolPolicy> = { ...((row.tool_policies ?? {}) as Record<string, ToolPolicy>) };
+  for (const [tool, p] of Object.entries(changes)) {
+    if (p === "default") delete next[tool];
+    else next[tool] = p;
+  }
+  await db.from("connections").update({ tool_policies: next }).eq("id", id);
+  return next;
+}
+
 /** Calls one tool for a run; the token is decrypted only for this call. */
 export async function callConnectionTool(userId: string, connectionId: string, tool: string, args: Record<string, unknown>) {
-  const { data: row } = await supabaseAdmin().from("connections").select("url,secret_ciphertext,enabled").eq("id", connectionId).eq("user_id", userId).maybeSingle();
+  const { data: row } = await supabaseAdmin().from("connections").select("url,secret_ciphertext,enabled,read_only,tools,tool_policies").eq("id", connectionId).eq("user_id", userId).maybeSingle();
   if (!row?.enabled) throw new Error("This connection was removed or switched off.");
+  // The policy is checked again at call time: a tool blocked after the run started stays blocked.
+  const cached = ((row.tools ?? []) as CachedTool[]).find((t) => t.name === tool);
+  if (cached && policyFor(tool, cached, row.read_only, row.tool_policies) === "block") throw new Error(`The user blocked ${tool} for this project.`);
   const client = await connect(row.url, secretOf(row, userId));
   try {
     const result = await withTimeout(client.callTool({ name: tool, arguments: args }), CALL_TIMEOUT_MS, `The ${tool} call`);

@@ -531,6 +531,10 @@ Deployments are static by default, which suits the frontend apps the agent build
 - **Sandboxes.** MicroVM isolation; no platform secrets inside; command timeouts and resource limits; destructive commands refused; preview errors accepted only from the sandbox's own origin.
 - **Web access.** Research fetches run on the server with SSRF guards: http(s) only, DNS resolution and re-checks on every redirect against private ranges, plus size and time limits. Fetched content goes to an isolated sub-agent, and only its summary reaches the main agent, which limits prompt-injection blast radius.
 - **Auth.** Supabase sessions in httpOnly cookies, refreshed by `proxy.ts`; OAuth `state` checks for the GitHub flow.
+- **What's stored is redacted** (`src/lib/redact.ts`). Trace spans, saved messages, and run errors and summaries pass through one scrubber. It catches known key formats (provider keys, GitHub, Slack and AWS tokens, JWTs, bearer headers, PEM keys) and values under secret-sounding names, after gitleaks and GitHub's published patterns. The model still sees the original during its run. A memory or suggestion that holds a secret is refused, not stored. The workflow's own event log keeps step results for replay; it's governed by Workflow's retention.
+- **Retention.** A daily cron (`/api/cron/retention`, behind `CRON_SECRET`) clears span inputs and outputs after `TRACE_RETENTION_DAYS`. It works in batches and skips projects with a run in progress. Messages and versions are never deleted; the Trace tab says when a span's details were cleared.
+- **Connection tools ask first.** Each tool is allow, ask or block. Anything not read-only defaults to ask, and the run waits on a durable hook for your answer (see [CUSTOMIZE.md](CUSTOMIZE.md#connections-mcp)).
+- **Sandbox network.** Vercel Sandbox's firewall allows npm, GitHub and each project's added domains, and nothing else. A smoke test checks that none of Daedalus's own secrets appear in a sandbox's environment.
 
 ---
 

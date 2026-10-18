@@ -6,7 +6,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Icon } from "@/components/icons";
 import { PartBoundary } from "./part-boundary";
-import { CheckLine, CheckpointLine, MemoryCard, PlanCard, QuestionsCard, PointedChip, RouteChip, SuggestionCard, SubagentCard, ToolCard, ExploreGroup, type ToolPart, type SubagentData } from "./tool-cards";
+import { ApprovalCard, type ApprovalData, CheckLine, CheckpointLine, MemoryCard, PlanCard, QuestionsCard, PointedChip, RouteChip, SuggestionCard, SubagentCard, ToolCard, ExploreGroup, type ToolPart, type SubagentData } from "./tool-cards";
 
 type Part = UIMessage["parts"][number] & { type: string; [key: string]: unknown };
 
@@ -192,6 +192,7 @@ function AssistantMessage({
       return <SubagentCard key={b.key} part={tp} live={subagents.get(tp.toolCallId)} onOpenTrace={() => onOpenTrace(runId)} />;
     }
     if (p.type.startsWith("tool-")) return <ToolCard key={b.key} part={p as unknown as ToolPart} />;
+    if (p.type === "data-approval") return <ApprovalCard key={b.key} data={p.data as ApprovalData} runId={runId} />;
     if (p.type === "data-check") return <CheckLine key={b.key} data={p.data as never} />;
     if (p.type === "data-checkpoint") return <CheckpointLine key={b.key} data={p.data as never} />;
     if (p.type === "data-run-end") {

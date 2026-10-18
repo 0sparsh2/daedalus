@@ -3,6 +3,7 @@ import { jsonError, withUser } from "@/lib/http";
 import { memoriesFor } from "@/lib/memory/memory";
 import { getProject } from "@/lib/projects";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { findSecret } from "@/lib/redact";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -24,6 +25,8 @@ export async function POST(req: Request, ctx: Ctx) {
     await getProject(user.id, id);
     const parsed = addSchema.safeParse(await req.json().catch(() => null));
     if (!parsed.success) return jsonError(400, "A memory is one sentence, 3 to 500 characters.", "bad_request");
+    const secret = findSecret(parsed.data.text);
+    if (secret) return jsonError(400, `That looks like ${secret}. Memories go into every prompt, so don't store secrets in them.`, "contains_secret");
     const { data, error } = await supabaseAdmin()
       .from("memories")
       .insert({ user_id: user.id, project_id: parsed.data.scope === "me" ? null : id, text: parsed.data.text.trim(), source: "user", status: "kept", decided_at: new Date().toISOString() })

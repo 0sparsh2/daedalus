@@ -132,6 +132,11 @@ export const MOCK_SCENARIOS: Record<string, MockTurn[]> = {
     },
     { text: "Notes added." },
   ],
+  // Test-only: what the sandbox's environment holds (it must hold none of Daedalus's secrets).
+  "env-dump": [
+    { text: "Listing the environment.", toolCalls: [{ name: "run_command", args: { command: "env | sort; echo ---; tr '\\0' '\\n' < /proc/1/environ | sort" } }] },
+    { text: "Listed." },
+  ],
   "read-notes": [
     { text: "Reading the notes.", toolCalls: [{ name: "read_file", args: { path: "docs/notes.md" } }] },
     { text: "Read them." },
@@ -213,6 +218,16 @@ export function pickTurn(messages: ChatMessage[], toolNames: string[]): MockTurn
     const system = textOf(messages.find((m) => m.role === "system")?.content);
     const section = (title: string) => system.split(`# ${title}`)[1]?.split("\n# ")[0]?.trim() ?? "(missing)";
     return { text: `INSTRUCTIONS: ${section("The user's instructions (for all their projects)")}\nMEMORY: ${section("What the user asked you to remember")}` };
+  }
+  // Test-only: a command that prints a key (assembled here so no key-shaped literal is in the
+  // repo), to check the model sees it but stored copies don't; then try to remember it.
+  if (scenario === "secret-echo" || scenario === "remember-secret") {
+    const key = ["nv", "api-", "Zq7Lm2Xc9Vb4Nn6Kk1Pp3Rr5Tt8Ww0Yy2Aa"].join("");
+    const turn = messages.slice(tagged + 1).filter((m) => m.role === "assistant").length;
+    if (turn > 0) return { text: "Done." };
+    return scenario === "secret-echo"
+      ? { text: "Printing the config.", toolCalls: [{ name: "run_command", args: { command: `echo "WEATHER_API_KEY=${key}"` } }] }
+      : { text: "Remembering the key.", toolCalls: [{ name: "remember", args: { text: `The weather API key is ${key}`, scope: "project" } }] };
   }
   // Test-only review: read the newest run in the index, then suggest a rule.
   if (scenario === "review") {

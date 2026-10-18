@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { jsonError, withUser } from "@/lib/http";
-import { addConnection, listConnections, refreshConnection } from "@/lib/mcp/connections";
+import { addConnection, listConnections, refreshConnection, setToolPolicies } from "@/lib/mcp/connections";
 import { getProject } from "@/lib/projects";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
@@ -50,7 +50,14 @@ export async function POST(req: Request, ctx: Ctx) {
   });
 }
 
-const patchSchema = z.object({ id: z.string().uuid(), enabled: z.boolean().optional(), readOnly: z.boolean().optional(), refresh: z.boolean().optional() });
+const patchSchema = z.object({
+  id: z.string().uuid(),
+  enabled: z.boolean().optional(),
+  readOnly: z.boolean().optional(),
+  refresh: z.boolean().optional(),
+  /** Per-tool permission changes; "default" goes back to what the tool's annotations suggest. */
+  toolPolicies: z.record(z.string().max(128), z.enum(["allow", "ask", "block", "default"])).optional(),
+});
 
 /** Switches a connection on or off, marks it read-only, or re-checks it. */
 export async function PATCH(req: Request, ctx: Ctx) {
@@ -59,8 +66,9 @@ export async function PATCH(req: Request, ctx: Ctx) {
     await getProject(user.id, id);
     const parsed = patchSchema.safeParse(await req.json().catch(() => null));
     if (!parsed.success) return jsonError(400, "Invalid request", "bad_request");
-    const { id: connId, enabled, readOnly, refresh } = parsed.data;
+    const { id: connId, enabled, readOnly, refresh, toolPolicies } = parsed.data;
     if (refresh) return Response.json(await refreshConnection(user.id, connId));
+    if (toolPolicies) return Response.json({ ok: true, toolPolicies: await setToolPolicies(user.id, id, connId, toolPolicies) });
     const patch: Record<string, boolean> = {};
     if (enabled !== undefined) patch.enabled = enabled;
     if (readOnly !== undefined) patch.read_only = readOnly;

@@ -18,6 +18,7 @@ import { routeOf, type RunScope } from "./scope";
 import * as impl from "./tools/impl";
 import type { PlainPart } from "./ui-parts";
 import { recentRunsIndex, runsIndexText } from "./run-evidence";
+import { redactText, redactValue } from "@/lib/redact";
 
 /**
  * Durable steps around the agent loop: start (provision sandbox, gather context), the
@@ -235,7 +236,14 @@ export async function finishRunStep(scope: RunScope, input: FinishInput) {
     extra.push(chunk);
   }
 
-  const parts = [...input.parts, ...extra];
+  // Stored copies are redacted; the model had the originals during the run. The user's own
+  // message for this run is redacted now too, once it has done its job.
+  const parts = redactValue([...input.parts, ...extra]);
+  const { data: asked } = await db.from("messages").select("id,parts").eq("project_id", scope.projectId).eq("role", "user").eq("metadata->>runId", scope.runId).maybeSingle();
+  if (asked) {
+    const clean = redactValue(asked.parts);
+    if (JSON.stringify(clean) !== JSON.stringify(asked.parts)) await db.from("messages").update({ parts: clean }).eq("id", asked.id);
+  }
   await db.from("messages").upsert({
     id: input.assistantMessageId,
     project_id: scope.projectId,
@@ -246,10 +254,11 @@ export async function finishRunStep(scope: RunScope, input: FinishInput) {
     metadata: { runId: scope.runId, model: scope.model, provider: scope.provider, mode: scope.mode, route: input.route ?? { route: routeOf(scope), by: "default", reason: "" }, pointed: input.pointed },
   });
 
-  const summary = ([...input.parts].reverse().find((p) => p.type === "text")?.text as string | undefined)?.slice(0, 500) ?? null;
+  const lastText = [...input.parts].reverse().find((p) => p.type === "text")?.text as string | undefined;
+  const summary = lastText ? redactText(lastText).slice(0, 500) : null;
   const { data: current } = await db.from("runs").select("status").eq("id", scope.runId).maybeSingle();
   const finalStatus = current?.status === "cancelled" ? "cancelled" : input.outcome;
-  await db.from("runs").update({ status: finalStatus, ended_at: new Date().toISOString(), error: input.error ?? null, summary }).eq("id", scope.runId);
+  await db.from("runs").update({ status: finalStatus, ended_at: new Date().toISOString(), error: input.error ? redactText(input.error) : null, summary }).eq("id", scope.runId);
   const projectPatch: Record<string, unknown> = { status: "ready" };
   if (input.planTitle) projectPatch.name = input.planTitle.slice(0, 60);
   await db.from("projects").update(projectPatch).eq("id", scope.projectId);

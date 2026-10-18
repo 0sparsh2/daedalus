@@ -13,32 +13,18 @@ What we plan to build next in Daedalus's agent harness, and why. Each item start
 
 The last three items follow [Harness²](https://github.com/google-research/harness2) (Google Research, Apache-2.0). It treats the harness as editable components with different costs: text that's always in the prompt costs the most, and skills, scripts and hooks cost less. It improves the harness from execution evidence and has no answer key to check against. We use its principles and write our own prompts.
 
-## Now: safety and cost
+## Shipped: safety and cost
 
-### 1. Secret redaction in traces and memory
-- **Why:** tool spans store each call's input and up to 1,500 characters of its output (`summarize` in `src/lib/agent/runtime.ts`). Model-call spans and memories aren't scrubbed either. A `cat .env` or a pasted key would land in Postgres as-is.
-- **Approach:** add one `redact()` that runs before every span, message and memory write. It masks the value of a secret-looking key (`*_KEY`, `*_TOKEN`, `password`, `authorization`), plus common key formats (`sk-…`, `nvapi-…`, `ghp_…`, `AKIA…`, JWTs), keeping the first 4 characters so a trace stays readable.
-- **Reference:** OWASP Logging Cheat Sheet; GitHub's published secret-scanning patterns.
+| Item | What it does | Details |
+| --- | --- | --- |
+| 1. Secret redaction | One scrubber runs on everything stored: spans, saved messages (your own once its run ends), run errors and summaries. It matches known key formats and values under secret-sounding names, after gitleaks and GitHub's published patterns, with no guessing at "random-looking" strings. The model still sees originals during its run. Memories and suggestions that hold a secret are refused. | `src/lib/redact.ts` |
+| 2. Retention cleanup | A daily Vercel Cron job, behind `CRON_SECRET`, clears span inputs and outputs after `TRACE_RETENTION_DAYS` (default 30). Rows, timing, tokens and errors stay. It works in batches and skips projects with a run in progress. Messages and versions are never deleted, and the Trace tab says when details were cleared. | `src/lib/retention.ts`, `/api/cron/retention` |
+| 3. Allow / ask / block per tool | Defaults follow MCP annotations: read-only tools are allowed, destructive ones ask, and everything else asks (in build turns only). "Ask" pauses the run on a durable workflow hook until you choose Allow once, Always allow or Deny. Stop answers for you; after 15 minutes the call isn't made. Blocks are re-checked at call time. | `src/lib/mcp/policy.ts`, `src/workflows/approval.ts` |
+| 4. Sandbox hardening | Vercel Sandbox's firewall allows npm, GitHub and each project's added domains, and nothing else; changes apply to a running sandbox. A smoke test checks that none of Daedalus's secrets appear in a sandbox's environment. | `src/lib/sandbox/network.ts`, Customize → Connections |
 
-### 2. Retention cleanup
-- **Why:** spans, runs and messages are never deleted. Spans grow fastest: every model and tool call is one.
-- **Approach:** a daily Vercel Cron job deletes spans older than `TRACE_RETENTION_DAYS` (default 30), keeping each run's totals and summary. Messages stay as long as their project does, because they are the user's chat. Old versions are pruned only when the user asks.
-- **Reference:** Vercel Cron Jobs.
+Tested in `scripts/smoke-security.mjs` (26 checks, against a real MCP server) and in the browser smoke.
 
-### 3. Per-tool permissions for connections
-- **Why:** the only gate today is read-only or not, set from the server's `readOnlyHint` or the user's "only reads data" flag (`src/lib/mcp/connections.ts`). There's no way to allow one tool and turn off another.
-- **Approach:** each tool gets **Allow**, **Ask** or **Off** in Customize → Connections. The default is Allow for read-only tools and Ask for everything else.
-  - **Ask** ends the turn with an approval card, the same way `ask_user` does.
-  - Approving runs the call and continues in the next turn.
-  - Approvals can be "this time" or "always for this project".
-- **Reference:** MCP tool annotations (`readOnlyHint`, `destructiveHint`); the allow/ask/deny permission rules in Claude Code's public documentation.
-
-### 4. Sandbox network and environment limits
-- **Why:** neither sandbox provider sets network limits (`src/lib/sandbox/docker.ts`, `vercel.ts`). The app's sandbox can reach any host.
-- **Approach:**
-  - **Network:** an allowlist by default: npm, GitHub, common CDNs and the app's declared APIs. The project can widen it in settings.
-  - **Environment:** the sandbox gets only the variables the app needs, never Daedalus's own.
-- **Reference:** Vercel Sandbox network policy documentation; Docker network options for local dev.
+**Not done, and why.** Local Docker sandboxes aren't network-restricted. An `--internal` Docker network blocks egress, but we tested it and it also stops the preview port from publishing. Doing it locally means an egress container: a filtering proxy for outbound traffic, plus a port forwarder per sandbox for the preview. That's listed below. Blocking reads inside a sandbox isn't worth it for a single-project sandbox.
 
 ## Next: agent quality
 
@@ -95,7 +81,10 @@ Versions are per run (git checkpoints). Each file-edit card could get **Undo thi
 ### 15. OpenTelemetry export
 Our spans are already a tree of runs, model calls, tool calls and sub-agents. Mapping them to the OpenTelemetry semantic conventions for generative AI would let teams send traces to the observability tools they already use. *Reference: OpenTelemetry semantic conventions for GenAI.*
 
-### 16. "While you were away"
+### 16. Local sandbox egress
+The same allowlist for local Docker sandboxes. Sandboxes would sit on an internal network. One edge container would run a filtering proxy for outbound traffic, on the same domain list, plus a port forwarder per sandbox for the preview. It's only worth doing if local development needs to be a security boundary.
+
+### 17. "While you were away"
 When a run finishes after you've left, show a short summary the next time you open the project: what changed, the checks, anything it asked. `runs.summary` already holds the run's last reply.
 
 ## Sources

@@ -28,10 +28,29 @@ The **Customize** tab in a project sets how Daedalus works on it. Everything use
 
 - **Adding one:** give a name, the server's address and an optional token. Daedalus checks the address (https only, no private network addresses), connects, lists the server's tools and caches them. Tokens are encrypted with AES-256-GCM, using the user id as authenticated data, and are never sent back to the browser.
 - **In a run:** enabled connections' tools are offered as `mcp__<connection>__<tool>`. Each call is a durable step on Daedalus's server, never in the app's sandbox. A call has a 60-second cap and isn't repeated automatically, because a connected service may have side effects. Every call appears in the trace.
-- **Read-only gating:** a tool counts as read-only if its server marks it so (`readOnlyHint`), or if you mark the whole connection "only reads data". Read-only tools work in answer, plan and build turns; other tools only in build turns; chat turns get none.
+- **Read-only gating:** a tool counts as read-only if its server marks it so (`readOnlyHint`), or if you mark the whole connection "only reads data", unless the server marks it destructive (`destructiveHint`). Read-only tools work in answer, plan and build turns. Other tools work only in build turns. Chat and review turns get none.
+- **Permissions per tool** (Tools and permissions, on each connection):
+
+  | Permission | What happens | Default for |
+  | --- | --- | --- |
+  | Allow | The agent calls it directly | Read-only tools |
+  | Ask each time | The run pauses on an approval card | Everything else, and anything marked destructive |
+  | Block | Never offered, and refused if called | — |
+
+  A blocked tool is checked again at call time, so blocking one mid-run takes effect straight away.
+- **Approvals:** an "ask" call shows **Allow once**, **Always allow** or **Deny**, with the arguments it would send.
+  - The run waits on a durable workflow hook, which uses no compute.
+  - Your answer resumes it from the same place, after the server checks the run is yours. **Always allow** also changes that tool's permission.
+  - **Stop** answers a waiting approval for you. After 15 minutes without an answer, the call isn't made and the agent carries on without it.
 - **Research sub-agents** get the read-only connection tools too, and their prompt tells them to use connected documentation services first.
 - **Free to connect:** Context7 (library docs), DeepWiki (public GitHub repositories) and Microsoft Learn. These are third-party services, so the agent's queries go to them.
 - **Measured:** with the Docs research kit installed, Nemotron answered a react-markdown question by calling Context7's `resolve-library-id` and then `query-docs`.
+
+## Internet access from the sandbox
+
+Your app's own API calls run in the browser preview, so the sandbox only needs to install packages. On Vercel Sandbox its firewall allows npm and GitHub, plus any domain you add in Customize → Connections (for server-side code that calls an API). Everything else is denied. Changes apply to a running sandbox straight away.
+
+Local Docker sandboxes aren't restricted. An `--internal` Docker network blocks egress, but it also stops the preview port from publishing. Docker is the development provider, not a security boundary.
 
 ## Skills
 

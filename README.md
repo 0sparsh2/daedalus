@@ -76,6 +76,8 @@ Open http://localhost:3000, describe an app and press Send. With `NEXT_PUBLIC_EN
 | `SEARXNG_URL` | Optional: a SearXNG instance for free, keyless web search (`pnpm search:start` runs one at `http://127.0.0.1:8888`). Tried first |
 | `TAVILY_API_KEY`, `BRAVE_SEARCH_API_KEY` | Optional: hosted search APIs, tried next. Tavily's free tier (1,000 searches a month, no card) suits production; Brave is paid. Without any of these, research falls back to DuckDuckGo, then npm and GitHub search |
 | `VERCEL_TOKEN`, `VERCEL_TEAM_ID`, `VERCEL_PROJECT_ID` | Vercel Sandbox from a non-Vercel host (on Vercel, OIDC is automatic) |
+| `CRON_SECRET`, `TRACE_RETENTION_DAYS` | The daily trace cleanup: its bearer secret, and how long span details are kept (default 30 days) |
+| `SANDBOX_NETWORK` | `open` lifts the Vercel Sandbox internet allowlist (npm, GitHub and each project's added domains) |
 
 ## Tests
 
@@ -90,7 +92,13 @@ TEST_NVIDIA_API_KEY=… node scripts/eval-real.mjs nvidia/nemotron-3-super-120b-
                                           # golden-task evals: build on a real model, then score the app
 node tests/e2e/ui-flow.mjs                # browser: Send → sign up → connect model → plan → build → preview/code/trace
 node tests/e2e/rules-audit.mjs            # UI rules audit: contrast, names, labels, targets, headings (desktop/phone, light/dark)
+node scripts/smoke-customize.mjs          # connections, skills, rules, memory, mentions, suggestions, reviews, kits
+node scripts/smoke-security.mjs           # redaction, trace retention, per-tool approvals, sandbox isolation
+node scripts/smoke-composer.mjs           # browser: @ and / mentions, + menu, suggestion and approval cards
+node scripts/clean-test-sandboxes.mjs     # removes the Docker sandboxes test accounts created (yours are kept)
 ```
+
+Run the scripts with `--env-file=.env.development.local` (they create their own test accounts). Each test project gets its own Docker sandbox, so clean them up now and then.
 
 The end-to-end tests run the real pipeline (UI, gateway, durable workflow, Docker sandbox, Supabase) against a scripted mock model, so they need no paid keys.
 
