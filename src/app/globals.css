@@ -159,7 +159,12 @@ button.chip:hover:not(:disabled) { border-color: var(--muted); }
 .composer:focus-within { border-color: var(--accent); }
 .composer textarea { border: 0; background: transparent; resize: none; padding: 14px 16px 6px; min-height: 64px; max-height: 280px; font-size: 16px; line-height: 1.5; outline: none; border-radius: var(--r-3) var(--r-3) 0 0; }
 .composer.compact textarea { min-height: 44px; font-size: 15px; padding: 10px 12px 4px; }
-.composer-row { display: flex; align-items: center; gap: 6px; padding: 8px 10px 10px; flex-wrap: wrap; position: relative; }
+.composer-row { display: flex; align-items: center; gap: 6px; padding: 8px 10px 10px; position: relative; min-width: 0; }
+/* Everything stays on one row; the model name gives way first. */
+.composer-row > * { flex-shrink: 0; }
+.composer-row .menu-wrap { flex-shrink: 1; min-width: 0; }
+.composer-row .menu-wrap > .chip { max-width: 100%; }
+.chip-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .composer-row .spacer { flex: 1; }
 .send { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: var(--on-accent); flex: none; }
 .send:hover:not(:disabled) { filter: brightness(1.08); }
@@ -210,8 +215,20 @@ button.chip:hover:not(:disabled) { border-color: var(--muted); }
 .topbar .spacer { flex: 1; }
 .topbar .pname { font-weight: 600; min-width: 0; max-width: 34vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-radius: var(--r-1); padding: 4px 6px; }
 .topbar .pname:hover { background: var(--sunk); }
-.ws-body { display: grid; grid-template-columns: minmax(340px, 440px) 1fr; min-height: 0; }
-.chat { display: grid; grid-template-rows: 1fr auto; min-height: 0; border-right: 1px solid var(--line); background: var(--bg); }
+.ws-body { display: grid; grid-template-columns: var(--chat-w, 440px) minmax(0, 1fr); min-height: 0; }
+.chat { position: relative; display: grid; grid-template-rows: 1fr auto; min-height: 0; border-right: 1px solid var(--line); background: var(--bg); }
+/* The divider: an 8 px grab area over the chat's right border. */
+.resizer { position: absolute; top: 0; bottom: 0; right: -5px; width: 9px; z-index: 6; cursor: col-resize; touch-action: none; }
+.resizer::after { content: ""; position: absolute; top: 0; bottom: 0; left: 3px; width: 3px; border-radius: 2px; background: transparent; transition: background-color 0.15s; }
+.resizer:hover::after, .resizer:focus-visible::after, .ws-body.resizing .resizer::after { background: var(--accent); }
+.resizer:focus-visible { outline: none; }
+.ws-body.resizing { cursor: col-resize; user-select: none; }
+.ws-body.resizing iframe { pointer-events: none; }
+/* Full-screen chat: the panels step aside and the conversation sits at a readable width. */
+.ws-body[data-layout="chat"] { grid-template-columns: minmax(0, 1fr); }
+.ws-body[data-layout="chat"] .panel { display: none; }
+.ws-body[data-layout="chat"] .chat { border-right: 0; }
+.ws-body[data-layout="chat"] .chat-scroll, .ws-body[data-layout="chat"] .chat-foot { padding-inline: max(16px, calc((100% - 860px) / 2)); }
 .chat-scroll { overflow-y: auto; padding: 16px 16px 8px; display: grid; gap: 14px; align-content: start; min-height: 0; }
 .chat-foot { padding: 8px 12px 12px; display: grid; gap: 8px; }
 .msg-user { justify-self: end; max-width: 88%; background: var(--sunk); border-radius: 12px 12px 3px 12px; padding: 8px 12px; font-size: 14.5px; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -366,7 +383,9 @@ button.chip:hover:not(:disabled) { border-color: var(--muted); }
 /* Mobile */
 .mobile-switch { display: none; }
 @media (max-width: 860px) {
-  .ws-body { grid-template-columns: 1fr; }
+  .ws-body, .ws-body[data-layout] { grid-template-columns: 1fr; }
+  .resizer { display: none; }
+  .ws-body[data-layout="chat"][data-view="panel"] .panel { display: grid; }
   .ws-body[data-view="chat"] .panel { display: none; }
   .ws-body[data-view="panel"] .chat { display: none; }
   .mobile-switch { display: inline-flex; }

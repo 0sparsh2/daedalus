@@ -47,13 +47,52 @@ await page.locator(".msg-ai").first().waitFor({ timeout: 120_000 });
 await page.getByRole("button", { name: "Send" }).waitFor({ timeout: 180_000 });
 
 const box = page.getByLabel("Message Daedalus");
+
+// Layout: drag the divider, resize from the keyboard, remember it, full-screen chat.
+const chat = page.getByRole("region", { name: "Conversation" });
+const divider = page.getByRole("separator", { name: "Resize the chat" });
+const chatWidth = async () => Math.round((await chat.boundingBox()).width);
+const w0 = await chatWidth();
+const d = await divider.boundingBox();
+await page.mouse.move(d.x + d.width / 2, d.y + 200);
+await page.mouse.down();
+await page.mouse.move(d.x + d.width / 2 + 120, d.y + 200, { steps: 8 });
+await page.mouse.move(d.x + d.width / 2 + 200, d.y + 200, { steps: 8 });
+await page.mouse.up();
+const w1 = await chatWidth();
+check("dragging the divider widens the chat", Math.abs(w1 - w0 - 200) <= 6, `${w0} → ${w1}`);
+await divider.focus();
+await page.keyboard.press("ArrowLeft");
+const w2 = await chatWidth();
+check("arrow keys resize it too", Math.abs(w1 - w2 - 24) <= 2, `${w1} → ${w2}`);
+await page.keyboard.press("Home");
+const wMin = await chatWidth();
+const sendBox = await page.getByRole("button", { name: "Send" }).boundingBox();
+const modelBox = await page.getByRole("button", { name: /^Model:/ }).boundingBox();
+check("at its narrowest, the composer stays on one row", wMin <= 322 && Math.abs(sendBox.y + sendBox.height / 2 - (modelBox.y + modelBox.height / 2)) < 6, `width ${wMin}`);
+await page.screenshot({ path: `${OUT}/00-narrow.png` });
+await page.keyboard.press("End");
+const wMax = await chatWidth();
+await page.reload();
+await box.waitFor();
+check("the width is remembered", Math.abs((await chatWidth()) - wMax) <= 2 && wMax > w1, `${wMax}`);
+await page.getByRole("button", { name: "Full-screen chat" }).click();
+check("full-screen chat hides the panels", !(await page.getByRole("tablist").isVisible()) && (await chatWidth()) >= 1400);
+await page.screenshot({ path: `${OUT}/00-fullscreen.png` });
+await page.keyboard.press("Control+Backslash");
+check("Ctrl+\\ brings the panels back", await page.getByRole("tablist").isVisible());
+await page.keyboard.press("Control+Backslash");
+await page.getByRole("button", { name: "Trace" }).first().click();
+check("opening Trace from the chat leaves full screen", await page.getByRole("tablist").isVisible());
+await divider.dblclick();
+check("double-click resets the width", Math.abs((await chatWidth()) - 440) <= 2, String(await chatWidth()));
 // @ → project files
 await box.click();
 await box.pressSequentially("Look at @App");
 const list = page.getByRole("listbox", { name: "Project files" });
 await list.waitFor({ timeout: 60_000 });
-await page.getByRole("option").first().waitFor({ timeout: 60_000 });
-const fileOpts = await page.getByRole("option").allInnerTexts();
+await list.getByRole("option").first().waitFor({ timeout: 60_000 });
+const fileOpts = await list.getByRole("option").allInnerTexts();
 check("@ suggests project files", fileOpts.some((o) => o.includes("src/App.tsx")), fileOpts.slice(0, 4).join(", "));
 await page.screenshot({ path: `${OUT}/01-files.png` });
 await box.press("Enter");
@@ -62,7 +101,7 @@ check("Enter picks the file instead of sending", (await box.inputValue()) === "L
 // / → skills and commands
 await box.pressSequentially("and use /fo");
 await page.getByRole("listbox", { name: "Skills and commands" }).getByRole("option").first().waitFor({ timeout: 60_000 });
-const skillOpts = await page.getByRole("option").allInnerTexts();
+const skillOpts = await page.getByRole("listbox", { name: "Skills and commands" }).getByRole("option").allInnerTexts();
 check("/ suggests skills", skillOpts.some((o) => o.startsWith("/forms")), skillOpts.join(" | ").slice(0, 100));
 await page.screenshot({ path: `${OUT}/02-skills.png` });
 await box.press("Tab");

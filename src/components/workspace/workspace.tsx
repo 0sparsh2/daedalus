@@ -10,6 +10,7 @@ import { UserMenu } from "@/components/user-menu";
 import { ApiError, api, toApiError } from "@/lib/client/api";
 import { useSession } from "@/lib/client/session";
 import { AgentsPanel } from "./agents-panel";
+import { CHAT_DEFAULT, ChatResizer, clampChatWidth } from "./chat-resizer";
 import { CodePanel } from "./code-panel";
 import { Messages } from "./messages";
 import { PlanPanel } from "./plan-panel";
@@ -97,6 +98,43 @@ export function Workspace({
   // Which Customize section to open on, when the composer's + menu points at one.
   const [customizeAt, setCustomizeAt] = useState<{ section?: CustomizeSection; n: number }>({ n: 0 });
   const [view, setView] = useState<"chat" | "panel">("chat");
+  // Desktop layout, remembered per browser: the chat's width (the divider) and full-screen chat.
+  const [chatWidth, setChatWidth] = useState(CHAT_DEFAULT);
+  const [chatOnly, setChatOnlyState] = useState(false);
+  const [resizing, setResizing] = useState(false);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    try {
+      const w = Number(localStorage.getItem("daedalus:chat-width"));
+      if (w) setChatWidth(clampChatWidth(w, bodyRef.current?.clientWidth ?? window.innerWidth));
+      setChatOnlyState(localStorage.getItem("daedalus:chat-only") === "1");
+    } catch {
+      // storage unavailable: keep the defaults
+    }
+  }, []);
+  const setChatOnly = useCallback((on: boolean) => {
+    setChatOnlyState(on);
+    try {
+      localStorage.setItem("daedalus:chat-only", on ? "1" : "0");
+    } catch {}
+  }, []);
+  const saveChatWidth = useCallback((w: number) => {
+    setChatWidth(w);
+    try {
+      localStorage.setItem("daedalus:chat-width", String(w));
+    } catch {}
+  }, []);
+  // ⌘\ or Ctrl+\ switches full-screen chat.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "\\") {
+        e.preventDefault();
+        setChatOnly(!chatOnly);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [chatOnly, setChatOnly]);
   const [mode, setMode] = useState<RunMode>(initialMode ?? (initialMessages.length === 0 ? "plan" : "build"));
   const [runMode, setRunMode] = useState<RunMode>((activeRun?.mode as RunMode | undefined) ?? initialMode ?? "build");
   const [input, setInput] = useState("");
@@ -326,6 +364,16 @@ export function Workspace({
           </span>
         )}
         <span className="spacer" />
+        <button
+          type="button"
+          className="iconbtn hide-sm"
+          aria-pressed={chatOnly}
+          aria-label={chatOnly ? "Show the workspace panels" : "Full-screen chat"}
+          title={chatOnly ? "Show the panels (⌘\\)" : "Full-screen chat (⌘\\)"}
+          onClick={() => setChatOnly(!chatOnly)}
+        >
+          <Icon name={chatOnly ? "collapse" : "expand"} size={16} />
+        </button>
         <div className="mobile-switch mode" role="group" aria-label="View">
           <button type="button" aria-pressed={view === "chat"} onClick={() => setView("chat")}>Chat</button>
           <button type="button" aria-pressed={view === "panel"} onClick={() => setView("panel")}>Preview</button>
@@ -343,8 +391,15 @@ export function Workspace({
         <ShipMenu projectId={project.id} disabled={running} initialRepo={project.githubRepo} initialDeployUrl={project.deployUrl} />
         <UserMenu />
       </header>
-      <div className="ws-body" data-view={view}>
+      <div
+        className={`ws-body${resizing ? " resizing" : ""}`}
+        data-view={view}
+        data-layout={chatOnly ? "chat" : "split"}
+        ref={bodyRef}
+        style={{ "--chat-w": `${chatWidth}px` } as React.CSSProperties}
+      >
         <section className="chat" aria-label="Conversation">
+          {!chatOnly && <ChatResizer width={chatWidth} container={() => bodyRef.current} onResize={setChatWidth} onDone={saveChatWidth} onDragging={setResizing} />}
           <div className="chat-scroll" id="chat-scroll">
             <Messages
               messages={messages}
@@ -360,6 +415,7 @@ export function Workspace({
                 if (id) setTraceRunId(id);
                 setTab("trace");
                 setView("panel");
+                setChatOnly(false);
               }}
             />
             {error && !banner && (
@@ -399,6 +455,7 @@ export function Workspace({
                 setCustomizeAt((c) => ({ section, n: c.n + 1 }));
                 setTab("customize");
                 setView("panel");
+                setChatOnly(false);
               }}
             />
           </div>

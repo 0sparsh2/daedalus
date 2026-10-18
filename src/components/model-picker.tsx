@@ -48,7 +48,7 @@ export function ModelPicker({ align = "left", compact = false }: { align?: "left
       <button type="button" className="chip" aria-expanded={open} aria-label={`Model: ${label}`} onClick={() => setOpen((o) => !o)}>
         <Icon name="sparkle" size={14} />
         {!compact && active && <span className="faint">{PROVIDERS[active.provider].label} ·</span>}
-        {label}
+        <span className="chip-label">{label}</span>
         <Icon name="chev" size={14} />
       </button>
       {open && (
