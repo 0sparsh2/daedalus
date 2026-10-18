@@ -4,6 +4,7 @@ import { getStepMetadata } from "workflow";
 import { attachProjectSandbox, type SandboxHandle } from "@/lib/sandbox";
 import { addRunUsage, endSpan, startSpan, type SpanKind } from "@/lib/trace/spans";
 import type { RunScope, ToolOutput } from "./scope";
+import { findInjection, injectionNote } from "./injection";
 
 /** An expected failure the model should read and react to (bad path, edit miss, …). */
 export class ToolError extends Error {}
@@ -51,7 +52,10 @@ export async function runTool<T extends ToolOutput>(
   }).catch(() => {});
   try {
     const sandbox = opts.sandbox === false ? (undefined as unknown as SandboxHandle) : await attachProjectSandbox(scope.projectId);
-    const result = await fn(sandbox);
+    let result = await fn(sandbox);
+    // Text that tries to steer the agent gets a reminder right where the model reads it.
+    const injected = result.ok && typeof result.text === "string" ? findInjection(result.text) : null;
+    if (injected) result = { ...result, text: `${result.text}${injectionNote(injected)}`, injection: injected };
     await Promise.all([
       endSpan(spanId, { status: result.ok ? "ok" : "error", output: summarize(result), error: result.ok ? undefined : result.text, startedAt }),
       addRunUsage(scope.runId, { toolCalls: 1 }),

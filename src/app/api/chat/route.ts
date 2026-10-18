@@ -23,7 +23,7 @@ const bodySchema = z.object({
   }),
   mode: z.enum(["plan", "build"]).default("build"),
   /** What the user did beyond typing: pressed "Start building", or answered the agent's questions. */
-  intent: z.enum(["build", "answer"]).optional(),
+  intent: z.enum(["build", "answer", "review"]).optional(),
   model: z.object({ provider: z.string(), model: z.string() }).optional(),
 });
 

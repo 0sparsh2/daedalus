@@ -15,10 +15,11 @@
  */
 
 export const ROUTES = ["chat", "ask", "plan", "build"] as const;
-export type Route = (typeof ROUTES)[number];
+/** review is never classified: it starts only when the user asks for one (Customize, /review). */
+export type Route = (typeof ROUTES)[number] | "review";
 export type Mode = "plan" | "build";
 /** What the user did, when it says more than the text: pressed "Start building", answered questions. */
-export type Intent = "build" | "answer";
+export type Intent = "build" | "answer" | "review";
 
 export interface RouteDecision {
   route: Route;
@@ -49,6 +50,7 @@ export function isSmallTalk(text: string): boolean {
 export function ruleRoute(input: { text: string; mode: Mode; intent?: Intent }): RouteDecision | null {
   if (input.intent === "build") return { route: fitToMode("build", input.mode), by: "action", reason: "Pressed Start building" };
   if (input.intent === "answer") return { route: input.mode, by: "action", reason: "Answered the agent's questions" };
+  if (input.intent === "review") return { route: "review", by: "action", reason: "Asked for a review of recent runs" };
   if (/\[mock:[a-z0-9_-]+\]/i.test(input.text)) return { route: input.mode, by: "rule", reason: "Scripted test turn" };
   if (isSmallTalk(input.text)) return { route: "chat", by: "rule", reason: "Greeting or acknowledgement" };
   return null;
@@ -60,7 +62,7 @@ export function parseRoute(text: string): { route: Route; reason: string } | nul
   if (json) {
     try {
       const j = JSON.parse(json[0]) as { route?: string; reason?: unknown };
-      const route = String(j.route ?? "").toLowerCase() as Route;
+      const route = String(j.route ?? "").toLowerCase() as (typeof ROUTES)[number];
       if (ROUTES.includes(route)) return { route, reason: String(j.reason ?? "").slice(0, 160) };
     } catch {
       // fall through to the bare word
@@ -103,4 +105,4 @@ export function routerInput(input: { text: string; mode: Mode; lastAssistant?: s
   return lines.join("\n");
 }
 
-export const ROUTE_LABEL: Record<Route, string> = { chat: "Chat", ask: "Answer", plan: "Plan", build: "Build" };
+export const ROUTE_LABEL: Record<Route, string> = { chat: "Chat", ask: "Answer", plan: "Plan", build: "Build", review: "Review" };

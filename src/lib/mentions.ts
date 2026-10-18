@@ -7,6 +7,7 @@
 export const COMMANDS: Record<string, string> = {
   plan: "Plan first for this message (nothing is changed)",
   build: "Build this message straight away",
+  review: "Review recent runs and suggest skills, rules or memories",
 };
 
 const FILE = /(^|\s)@([A-Za-z0-9_.\-/]*[A-Za-z0-9_\-/])/g;

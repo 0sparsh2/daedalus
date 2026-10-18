@@ -10,6 +10,7 @@ import { addRunUsage, endSpan, recordSpan, startSpan } from "@/lib/trace/spans";
 import { EXPLORE_PROMPT, RESEARCH_PROMPT } from "./prompts";
 import { callConnectionTool, connectionTools } from "@/lib/mcp/connections";
 import { ToolError, errorDetail, stableId, truncateMiddle } from "./runtime";
+import { findInjection, injectionNote } from "./injection";
 import type { RunScope, ToolOutput } from "./scope";
 import * as impl from "./tools/impl";
 import { webFetch, webSearch } from "./tools/web";
@@ -103,6 +104,8 @@ export async function runSubagent(
       } catch (err) {
         out = { ok: false, text: `Error: ${err instanceof ToolError || err instanceof Error ? err.message : String(err)}` };
       }
+      const injected = out.ok ? findInjection(out.text) : null;
+      if (injected) out = { ...out, text: `${out.text}${injectionNote(injected)}` };
       step.ok = out.ok;
       if (out.ok) findings.push(`${name} ${step.label}:\n${out.text.slice(0, 700)}`);
       await Promise.all([

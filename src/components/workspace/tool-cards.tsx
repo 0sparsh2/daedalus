@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { describeSuggestedRule, normalizeSuggestion, type SuggestInput, type Suggestion } from "@/lib/suggestions";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Icon, type IconName } from "@/components/icons";
@@ -134,11 +135,29 @@ export function ToolCard({ part }: { part: ToolPart }) {
       const todos = (i.todos as Array<{ content: string; status: string }> | undefined) ?? [];
       return <TodoList todos={todos} />;
     }
+    case "read_run": {
+      icon = "history";
+      const head = String(o.text ?? "").split("\n")[0];
+      title = <>Read a past run <span className="mono">{String(i.runId ?? "").slice(0, 8)}</span></>;
+      meta = head.split(" · ").slice(1, 4).join(" · ") || null;
+      body = o.text ? <pre className="codeblock">{String(o.text).slice(0, 6000)}</pre> : null;
+      break;
+    }
     default:
       title = name.replace(/_/g, " ");
       body = o.text ? <pre className="codeblock">{String(o.text)}</pre> : null;
   }
 
+  if (typeof o.injection === "string") {
+    meta = (
+      <>
+        {meta}
+        <span className="inj-flag" title={`Contains text aimed at AI agents: “${o.injection}”. Daedalus treats it as data and doesn't follow it.`}>
+          <Icon name="alert" size={12} /> Instructions for AI found, ignored
+        </span>
+      </>
+    );
+  }
   if (part.state === "output-error") body = <pre className="codeblock">{part.errorText}</pre>;
   else if (failed(part) && o.text && !body) body = <pre className="codeblock">{String(o.text)}</pre>;
 
@@ -157,6 +176,7 @@ export function ToolCard({ part }: { part: ToolPart }) {
 
 export function ExploreGroup({ parts }: { parts: ToolPart[] }) {
   const running = parts.some((p) => !isDone(p));
+  const flagged = parts.filter((p) => typeof (p.output as { injection?: unknown } | undefined)?.injection === "string");
   const files = parts.filter((p) => p.type === "tool-read_file").length;
   const searches = parts.filter((p) => p.type === "tool-grep" || p.type === "tool-glob").length;
   const label = [files ? `read ${files} file${files === 1 ? "" : "s"}` : "", searches ? `${searches} search${searches === 1 ? "" : "es"}` : "", parts.some((p) => p.type === "tool-list_files") ? "listed files" : ""]
@@ -167,6 +187,11 @@ export function ExploreGroup({ parts }: { parts: ToolPart[] }) {
       <summary>
         {running ? <span className="spin" /> : <Icon name="search" size={14} className="faint" />}
         <span className="t-title">{running ? "Exploring the project" : `Explored: ${label}`}</span>
+        {flagged.length > 0 && (
+          <span className="inj-flag" title={flagged.map((p) => `${String(p.input?.path ?? "")}: “${String((p.output as { injection?: string }).injection)}”`).join("\n")}>
+            <Icon name="alert" size={12} /> Instructions for AI found, ignored
+          </span>
+        )}
       </summary>
       <div className="t-body">
         <ul className="todos">
@@ -176,6 +201,7 @@ export function ExploreGroup({ parts }: { parts: ToolPart[] }) {
               <span className="mono" style={{ fontSize: 12.5 }}>
                 {p.type.slice(5)} {String(p.input?.path ?? p.input?.pattern ?? "")}
               </span>
+              {flagged.includes(p) && <span className="inj-flag">contains instructions for AI agents</span>}
             </li>
           ))}
         </ul>
@@ -332,6 +358,7 @@ const ROUTE_CHIP: Record<string, { label: string; icon: "sparkle" | "eye" | "lis
   ask: { label: "Answer · read-only", icon: "eye" },
   plan: { label: "Planning · read-only", icon: "list" },
   build: { label: "Building", icon: "bolt" },
+  review: { label: "Review · suggests only", icon: "eye" },
 };
 
 /** Which agent the turn router picked for this message, and why (on hover). */
@@ -457,3 +484,69 @@ export function MemoryCard({ part, status, onDecide }: { part: ToolPart; status?
   );
 }
 
+
+/** A suggested skill or rule, with Keep and Discard. Shared by the chat card and Customize → Improve. */
+export function SuggestionView({
+  s,
+  status,
+  replaces,
+  error,
+  onDecide,
+}: {
+  s: Suggestion;
+  status?: string;
+  replaces?: string;
+  error?: string;
+  onDecide?(status: "kept" | "dismissed"): void;
+}) {
+  const skill = s.kind === "skill" ? s.payload : null;
+  return (
+    <div className="suggest-card" role="group" aria-label={`Suggested ${s.kind}: ${s.name}`}>
+      <span className="muted" style={{ fontSize: 12.5, display: "flex", gap: 6, alignItems: "center" }}>
+        <Icon name={skill ? "sparkle" : "shield"} size={13} />
+        {skill ? "Suggested skill" : "Suggested rule that always runs"}
+        {replaces === "project" ? " · updates the existing skill" : replaces === "builtin" ? " · replaces the built-in skill" : ""}
+      </span>
+      <span>
+        <b className={skill ? "mono" : undefined}>{s.name}</b>
+        {skill ? ` — ${skill.description}` : <span className="mono" style={{ display: "block", fontSize: 13 }}>{describeSuggestedRule(s.payload as Extract<Suggestion, { kind: "rule" }>["payload"])}</span>}
+      </span>
+      {skill && (
+        <details>
+          <summary className="muted" style={{ fontSize: 13, cursor: "pointer" }}>Instructions</summary>
+          <div className="suggest-body">{skill.body}</div>
+        </details>
+      )}
+      {s.evidence && (
+        <span className="muted" style={{ fontSize: 13 }}>
+          Why: {s.evidence}
+        </span>
+      )}
+      <span style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+        {status === "kept" ? (
+          <span className="muted" style={{ fontSize: 13 }}>{skill ? "Added to Skills" : "Added to Rules"}</span>
+        ) : status === "dismissed" ? (
+          <span className="muted" style={{ fontSize: 13 }}>Not added</span>
+        ) : !onDecide || !status ? (
+          <span className="spin" />
+        ) : (
+          <>
+            <button className="btn sm primary" onClick={() => onDecide("kept")}>{skill ? "Add skill" : "Add rule"}</button>
+            <button className="btn sm ghost" onClick={() => onDecide("dismissed")}>Discard</button>
+          </>
+        )}
+        {error && <span className="hint" role="alert" style={{ color: "var(--risk)" }}>{error}</span>}
+      </span>
+    </div>
+  );
+}
+
+/** suggest: the agent proposed a skill or a rule in the chat. */
+export function SuggestionCard({ part, status, error, onDecide }: { part: ToolPart; status?: string; error?: string; onDecide(id: string, status: "kept" | "dismissed"): void }) {
+  if (part.state === "output-error" || part.state === "input-error" || !part.input) return null;
+  const out = (part.output ?? {}) as { suggestionId?: string; status?: string; ok?: boolean; replaces?: string };
+  if (out.ok === false) return null;
+  const s = normalizeSuggestion(part.input as SuggestInput);
+  if ("error" in s) return null;
+  return <SuggestionView s={s} status={status ?? out.status} replaces={out.replaces} error={error} onDecide={out.suggestionId ? (st) => onDecide(out.suggestionId!, st) : undefined} />;
+}

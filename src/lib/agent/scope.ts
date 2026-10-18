@@ -15,7 +15,7 @@ export const runScopeSchema = z.object({
   /** The user's Plan/Build toggle: the ceiling on what a turn may do. */
   mode: z.enum(["plan", "build"]),
   /** What this turn does, set by the turn router (router.ts). Only "build" may change files. */
-  route: z.enum(["chat", "ask", "plan", "build"]).optional(),
+  route: z.enum(["chat", "ask", "plan", "build", "review"]).optional(),
   contextWindow: z.number(),
   maxOutputTokens: z.number(),
   /** Per-model request options (e.g. reasoning effort) for the builder and the sub-agents. */

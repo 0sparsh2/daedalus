@@ -34,7 +34,9 @@ type Tab = "preview" | "code" | "trace" | "plan" | "agents" | "customize";
  * Per-project chat runtime that lives outside React: the transport's callbacks read the
  * current mode and the in-flight workflow run id from here when a request is made.
  */
-const runtimes = new Map<string, { mode: RunMode; workflowRunId: string | null; intent?: "build" | "answer" }>();
+type Intent = "build" | "answer" | "review";
+const runtimes = new Map<string, { mode: RunMode; workflowRunId: string | null; intent?: Intent }>();
+const REVIEW_MESSAGE = "Review my recent runs and suggest how you could work better on this project.";
 function runtimeFor(projectId: string) {
   let r = runtimes.get(projectId);
   if (!r) {
@@ -196,12 +198,17 @@ export function Workspace({
   }, [activeRun, project.id, resumeStream, sendMessage, initialMode]);
 
   const send = useCallback(
-    async (text: string, overrideMode?: RunMode, intent?: "build" | "answer") => {
-      // /plan and /build pick the mode for this message; the command itself isn't sent.
+    async (text: string, overrideMode?: RunMode, intent?: Intent) => {
+      // /plan and /build pick the mode for this message, and /review asks for a review of recent
+      // runs; the command itself isn't sent.
       const { commands } = parseMentions(text);
+      const review = commands.includes("review");
       const command = commands.includes("build") ? "build" : commands.includes("plan") ? "plan" : undefined;
-      const t = (command ? text.replace(/(^|\s)\/(plan|build)(?=$|[\s.,!?;:])/g, "$1") : text).trim();
-      if (command && !overrideMode) {
+      let t = (command || review ? text.replace(/(^|\s)\/(plan|build|review)(?=$|[\s.,!?;:])/g, "$1") : text).trim();
+      if (review) {
+        intent = "review";
+        t ||= REVIEW_MESSAGE;
+      } else if (command && !overrideMode) {
         overrideMode = command;
         if (command === "build") intent ??= "build";
       }
@@ -244,6 +251,34 @@ export function Workspace({
   );
 
   const startBuild = useCallback(() => void send("Looks good. Build it following the plan.", "build", "build"), [send]);
+  const startReview = useCallback(() => {
+    setView("chat");
+    void send(REVIEW_MESSAGE, undefined, "review");
+  }, [send]);
+
+  // Suggested skills and rules: their status (so cards show Added / Not added after a reload) and
+  // any error from applying one.
+  const [suggestions, setSuggestions] = useState<Record<string, { status: string; error?: string }>>({});
+  const [suggestionsKey, setSuggestionsKey] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    api<{ suggestions: Array<{ id: string; status: string }> }>(`/api/projects/${project.id}/suggestions`)
+      .then((r) => !cancelled && setSuggestions(Object.fromEntries(r.suggestions.map((x) => [x.id, { status: x.status }]))))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [project.id, refreshKey, suggestionsKey]);
+  const decideSuggestion = useCallback(
+    (id: string, status: "kept" | "dismissed") => {
+      setSuggestions((m) => ({ ...m, [id]: { status } }));
+      void api(`/api/projects/${project.id}/suggestions`, { method: "PATCH", json: { id, status } })
+        // A kept skill or rule changes what the Customize, Code and Agents panels show.
+        .then(() => status === "kept" && setRefreshKey((k) => k + 1))
+        .catch((e) => setSuggestions((m) => ({ ...m, [id]: { status: "proposed", error: e instanceof ApiError ? e.message : "Couldn't apply it" } })));
+    },
+    [project.id],
+  );
   const answer = useCallback((text: string) => void send(text, undefined, "answer"), [send]);
 
   // Status of memories the agent proposed, so their cards show Kept / Not kept after a reload.
@@ -318,6 +353,8 @@ export function Workspace({
               onAnswer={answer}
               memoryStatus={memoryStatus}
               onMemoryDecision={decideMemory}
+              suggestions={suggestions}
+              onSuggestionDecision={decideSuggestion}
               onRequestChanges={() => document.getElementById("composer-input")?.focus()}
               onOpenTrace={(id) => {
                 if (id) setTraceRunId(id);
@@ -402,7 +439,7 @@ export function Workspace({
             {tab === "plan" && <PlanPanel messages={messages} onStartBuild={startBuild} running={running} />}
             {tab === "agents" && <AgentsPanel projectId={project.id} refreshKey={refreshKey} hasSandbox={Boolean(previewUrl)} />}
             {tab === "customize" && (
-              <CustomizePanel key={customizeAt.n} projectId={project.id} refreshKey={refreshKey} hasSandbox={Boolean(previewUrl)} initialSection={customizeAt.section} />
+              <CustomizePanel key={customizeAt.n} projectId={project.id} refreshKey={refreshKey} hasSandbox={Boolean(previewUrl)} initialSection={customizeAt.section} onReview={running ? undefined : startReview} onSuggestionsChanged={() => setSuggestionsKey((k) => k + 1)} />
             )}
           </div>
         </section>

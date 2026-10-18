@@ -3,13 +3,13 @@ import { convertToModelMessages, hasToolCall, isStepCount, jsonSchema, tool, typ
 import { getWritable } from "workflow";
 import { compactHistory, turnFacts } from "@/lib/agent/history";
 import { STEP_LIMIT, makePrepareStep } from "@/lib/agent/loop";
-import { askPrompt, buildPrompt, chatPrompt, planPrompt, type PromptContext } from "@/lib/agent/prompts";
+import { askPrompt, buildPrompt, chatPrompt, planPrompt, reviewPrompt, type PromptContext } from "@/lib/agent/prompts";
 import { repairToolCall } from "@/lib/agent/repair";
 import { agentTokenStep, routeTurnStep } from "@/lib/agent/route-step";
 import type { Intent, Route } from "@/lib/agent/router";
 import { finalCheckStep, finishRunStep, isCancelledStep, pointedSummary, startRunStep } from "@/lib/agent/run-steps";
 import type { RunScope } from "@/lib/agent/scope";
-import { ASK_TOOLS, BUILD_TOOLS, PLAN_TOOLS, buildTools, type ToolName } from "@/lib/agent/tools";
+import { ASK_TOOLS, BUILD_TOOLS, PLAN_TOOLS, REVIEW_TOOLS, buildTools, type ToolName } from "@/lib/agent/tools";
 import { mcpToolStep } from "@/lib/agent/tools/steps";
 import { stepsToParts, type PlainPart } from "@/lib/agent/ui-parts";
 import { GatewayModel } from "@/lib/llm/gateway-model";
@@ -44,12 +44,14 @@ const PROFILES: Record<Route, { tools: ToolName[]; stopWhen: () => StopCondition
   ask: { tools: ASK_TOOLS, stopWhen: () => [isStepCount(STEP_LIMIT.ask), hasToolCall("ask_user")] },
   plan: { tools: PLAN_TOOLS, stopWhen: () => [isStepCount(STEP_LIMIT.plan), hasToolCall("propose_plan"), hasToolCall("ask_user")] },
   build: { tools: BUILD_TOOLS, stopWhen: () => [isStepCount(STEP_LIMIT.build), hasToolCall("ask_user")] },
+  review: { tools: REVIEW_TOOLS, stopWhen: () => [isStepCount(STEP_LIMIT.review)] },
 };
 
 function promptFor(route: Route, c: PromptContext): string {
   if (route === "chat") return chatPrompt({ projectName: c.projectName, state: c.state ?? "", today: c.today, userInstructions: c.userInstructions, memories: c.memories });
   if (route === "ask") return askPrompt(c);
   if (route === "plan") return planPrompt(c);
+  if (route === "review") return reviewPrompt(c);
   return buildPrompt(c);
 }
 
@@ -79,8 +81,8 @@ export async function agentRun(input: AgentRunInput) {
   const profile = PROFILES[route];
   const builtIn = buildTools();
   const toolsContext = Object.fromEntries(Object.keys(builtIn).map((k) => [k, scope])) as Record<ToolName, RunScope>;
-  // Connected MCP servers' tools: all of them in build turns, read-only ones elsewhere, none in chat.
-  const mcp = route === "chat" ? [] : (context.connections ?? []).filter((d) => route === "build" || d.readOnly);
+  // Connected MCP servers' tools: all of them in build turns, read-only ones elsewhere, none in chat or review.
+  const mcp = route === "chat" || route === "review" ? [] : (context.connections ?? []).filter((d) => route === "build" || d.readOnly);
   const tools: ToolSet = {
     ...builtIn,
     ...Object.fromEntries(

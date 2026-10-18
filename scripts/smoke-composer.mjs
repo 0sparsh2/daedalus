@@ -17,6 +17,16 @@ const errors = [];
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
 page.on("pageerror", (e) => errors.push(String(e)));
+// Next's dev tools badge can sit on top of the composer in dev; it isn't part of the product.
+await page.addInitScript(() => {
+  const hide = () => {
+    const style = document.createElement("style");
+    style.textContent = "nextjs-portal { display: none !important; }";
+    document.documentElement?.appendChild(style);
+  };
+  if (document.documentElement) hide();
+  else document.addEventListener("DOMContentLoaded", hide);
+});
 
 // Sign up on Send with the scripted model, which starts a project.
 await page.goto(BASE);
@@ -94,6 +104,49 @@ await box.fill("/plan");
 await box.press("Escape");
 await box.press("Enter");
 check("/plan on its own switches to Plan first, without sending", (await page.getByRole("button", { name: "Plan first", pressed: true }).isVisible()) && (await box.inputValue()) === "" && (await page.locator(".msg-user").count()) === userCount);
+// Suggested skills and rules: cards in the chat, applied only on Add
+await page.getByRole("group", { name: "Run mode" }).getByRole("button", { name: "Build" }).click();
+await box.fill("[mock:suggest] Learn from this");
+await box.press("Escape");
+await box.press("Enter");
+const ruleCard = page.getByRole("group", { name: "Suggested rule: Type check before finishing" });
+await ruleCard.waitFor({ timeout: 180_000 });
+await page.getByRole("button", { name: "Send" }).waitFor({ timeout: 180_000 });
+const skillCard = page.getByRole("group", { name: "Suggested skill: date-handling" });
+check("suggestion cards show in the chat", (await skillCard.isVisible()) && (await ruleCard.innerText()).includes("Before finishing a change, run npx tsc --noEmit"));
+check("a refused suggestion shows no card", (await page.getByRole("group", { name: /Suggested rule: Broken rule/ }).count()) === 0);
+await ruleCard.getByRole("button", { name: "Add rule" }).click();
+await ruleCard.getByText("Added to Rules").waitFor({ timeout: 20_000 });
+await skillCard.getByRole("button", { name: "Add skill" }).click();
+await skillCard.getByText("Added to Skills").waitFor({ timeout: 60_000 });
+await page.getByRole("tab", { name: "Customize" }).click();
+await page.getByRole("group", { name: "Customize sections" }).getByRole("button", { name: "Rules that always run" }).click();
+check("an added rule shows in Rules right away", await page.getByText("Type check before finishing").first().isVisible({ timeout: 10_000 }).catch(() => false));
+await page.screenshot({ path: `${OUT}/05-suggestions.png` });
+
+// Review: /review in the message box, and the button in Customize → Improve
+await box.fill("/review [mock:review]");
+await box.press("Escape");
+await box.press("Enter");
+const reviewReply = page.locator(".msg-ai").last();
+await reviewReply.getByText(/Reviewed \d+ runs/).waitFor({ timeout: 180_000 });
+check("/review starts a review turn", (await reviewReply.locator(".route-chip").first().innerText()).includes("Review"), await reviewReply.locator(".route-chip").first().innerText());
+check("the review's suggestion shows as a card", await reviewReply.getByRole("group", { name: "Suggested rule: Lint before finishing" }).isVisible());
+const lastUser = await page.locator(".msg-user").last().innerText();
+check("the command itself isn't sent", !lastUser.includes("/review"), lastUser);
+await page.getByRole("button", { name: "Send" }).waitFor({ timeout: 60_000 });
+await page.getByRole("tab", { name: "Customize" }).click();
+await page.getByRole("group", { name: "Customize sections" }).getByRole("button", { name: "Improve" }).click();
+const improve = page.getByRole("region", { name: "Suggestions" }).or(page.locator("section[aria-labelledby=sugg-h]"));
+await improve.getByRole("group", { name: "Suggested rule: Lint before finishing" }).waitFor({ timeout: 20_000 });
+check("Improve lists pending and added suggestions", (await improve.getByText("Added to Rules").count()) >= 1);
+await page.screenshot({ path: `${OUT}/06-improve.png` });
+await page.getByRole("button", { name: "Review recent runs" }).click();
+await page.locator(".msg-user").last().getByText("Review my recent runs").waitFor({ timeout: 30_000 });
+await page.locator(".msg-ai").last().locator(".route-chip").first().waitFor({ timeout: 120_000 });
+check("the Improve button starts a review", (await page.locator(".msg-ai").last().locator(".route-chip").first().innerText()).includes("Review"));
+await page.getByRole("button", { name: "Send" }).waitFor({ timeout: 180_000 });
+
 check("no page errors", errors.length === 0, errors.join(" | ").slice(0, 200));
 
 await browser.close();

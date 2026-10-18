@@ -15,7 +15,8 @@ Daedalus is a vibe-coding platform for both non-technical and technical builders
 ![Daedalus system architecture](docs/architecture.png)
 
 - **Architecture:** [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) covers sandboxes, the agent harness, model-agnosticism, the proxy, GitHub, deployment and scaling, and walks through what happens from a prompt to a running app.
-- **Customize:** [docs/CUSTOMIZE.md](docs/CUSTOMIZE.md) covers connections (MCP), skills (`SKILL.md`), rules that always run, instructions and approved memory, and kits.
+- **Customize:** [docs/CUSTOMIZE.md](docs/CUSTOMIZE.md) covers connections (MCP), skills (`SKILL.md`), rules that always run, instructions and approved memory, kits, and suggestions and reviews.
+- **Roadmap:** [docs/ROADMAP.md](docs/ROADMAP.md): what's next in the harness and why, from our own code and public sources.
 
 ## How it's built
 

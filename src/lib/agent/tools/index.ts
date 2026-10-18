@@ -1,5 +1,6 @@
 import { tool } from "ai";
 import { z } from "zod";
+import { suggestInputSchema } from "@/lib/suggestions";
 import { runScopeSchema, type RunScope, type ToolOutput } from "../scope";
 import * as steps from "./steps";
 
@@ -204,6 +205,21 @@ export function buildTools() {
       execute: (input, o) => steps.rememberStep(input, ctx(o as Opts)),
       toModelOutput,
     }),
+    suggest: tool({
+      description:
+        "Suggest a skill or a rule for this project, when this conversation showed a procedure worth reusing (skill) or something that must happen every time (rule). The user keeps or discards it; nothing changes until they keep it. For a short fact or preference, use remember instead.",
+      inputSchema: suggestInputSchema,
+      contextSchema: runScopeSchema,
+      execute: (input, o) => steps.suggestStep(input, ctx(o as Opts)),
+      toModelOutput,
+    }),
+    read_run: tool({
+      description: "Read one of the project's past runs in full: the request, every step and tool result, the automatic checks, and the user's next message. Use the run ids listed under Recent runs.",
+      inputSchema: z.object({ runId: z.string().describe("A run id from the Recent runs list") }),
+      contextSchema: runScopeSchema,
+      execute: (input, o) => steps.readRunStep(input, ctx(o as Opts)),
+      toModelOutput,
+    }),
     ask_user: tool({
       description:
         "Ask the user up to 4 short questions when an answer would change what you build (who it's for, the core flow, a choice between approaches). Offer likely answers as options. Your turn ends here; the answers come in the user's next message. Don't use it for things you can decide sensibly yourself.",
@@ -227,8 +243,10 @@ export type DaedalusTools = ReturnType<typeof buildTools>;
 export type ToolName = keyof DaedalusTools;
 
 /** Tool sets per route. chat has none; ask and plan are read-only; only build changes files. */
-export const ASK_TOOLS: ToolName[] = ["list_files", "read_file", "glob", "grep", "research", "explore", "skill", "remember", "ask_user"];
-export const PLAN_TOOLS: ToolName[] = ["list_files", "read_file", "glob", "grep", "research", "explore", "skill", "remember", "ask_user", "propose_plan"];
+export const ASK_TOOLS: ToolName[] = ["list_files", "read_file", "glob", "grep", "research", "explore", "skill", "remember", "suggest", "ask_user"];
+export const PLAN_TOOLS: ToolName[] = ["list_files", "read_file", "glob", "grep", "research", "explore", "skill", "remember", "suggest", "ask_user", "propose_plan"];
+/** Review turns read the project and its past runs, and can only suggest. */
+export const REVIEW_TOOLS: ToolName[] = ["list_files", "read_file", "glob", "grep", "skill", "read_run", "suggest", "remember"];
 export const BUILD_TOOLS: ToolName[] = [
   "list_files",
   "read_file",
@@ -246,5 +264,6 @@ export const BUILD_TOOLS: ToolName[] = [
   "explore",
   "skill",
   "remember",
+  "suggest",
   "ask_user",
 ];

@@ -3,8 +3,10 @@ import { useCallback, useEffect, useState } from "react";
 import { Icon } from "@/components/icons";
 import { ApiError, api } from "@/lib/client/api";
 import { describeRule, type Rule, type RulePreset } from "@/lib/rules";
+import type { Suggestion as SuggestionData } from "@/lib/suggestions";
+import { SuggestionView } from "./tool-cards";
 
-export type Section = "kits" | "connections" | "skills" | "rules" | "memory";
+export type Section = "kits" | "connections" | "skills" | "rules" | "memory" | "improve";
 
 const SECTIONS: Array<[Section, string]> = [
   ["kits", "Kits"],
@@ -12,6 +14,7 @@ const SECTIONS: Array<[Section, string]> = [
   ["skills", "Skills"],
   ["rules", "Rules that always run"],
   ["memory", "Instructions & memory"],
+  ["improve", "Improve"],
 ];
 
 /**
@@ -23,11 +26,16 @@ export function CustomizePanel({
   hasSandbox,
   refreshKey,
   initialSection = "connections",
+  onReview,
+  onSuggestionsChanged,
 }: {
   projectId: string;
   hasSandbox: boolean;
   refreshKey: number;
   initialSection?: Section;
+  /** Starts a review turn in the chat; absent while a run is going. */
+  onReview?(): void;
+  onSuggestionsChanged?(): void;
 }) {
   const [section, setSection] = useState<Section>(initialSection);
   return (
@@ -42,8 +50,9 @@ export function CustomizePanel({
       {section === "kits" && <KitsSection projectId={projectId} onOpen={setSection} />}
       {section === "connections" && <ConnectionsSection projectId={projectId} />}
       {section === "skills" && <SkillsSection projectId={projectId} hasSandbox={hasSandbox} refreshKey={refreshKey} />}
-      {section === "rules" && <RulesSection projectId={projectId} />}
+      {section === "rules" && <RulesSection projectId={projectId} refreshKey={refreshKey} />}
       {section === "memory" && <MemorySection projectId={projectId} refreshKey={refreshKey} />}
+      {section === "improve" && <ImproveSection projectId={projectId} refreshKey={refreshKey} onReview={onReview} onChanged={onSuggestionsChanged} />}
     </div>
   );
 }
@@ -247,7 +256,7 @@ function draftToRule(d: RuleDraft): Rule {
   return { ...base, event: "after_change", command: d.command.trim(), glob: d.glob.trim() || "**/*" };
 }
 
-function RulesSection({ projectId }: { projectId: string }) {
+function RulesSection({ projectId, refreshKey }: { projectId: string; refreshKey: number }) {
   const [rules, setRules] = useState<Rule[] | null>(null);
   const [presets, setPresets] = useState<RulePreset[]>([]);
   const [draft, setDraft] = useState<RuleDraft>(EMPTY_RULE);
@@ -265,7 +274,7 @@ function RulesSection({ projectId }: { projectId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [projectId]);
+  }, [projectId, refreshKey]);
 
   async function save(next: Rule[]) {
     const before = rules;
@@ -736,3 +745,76 @@ function KitsSection({ projectId, onOpen }: { projectId: string; onOpen(s: Secti
   );
 }
 
+
+type SuggestionRow = { id: string; kind: "skill" | "rule"; name: string; payload: Record<string, unknown>; evidence: string; status: string; created_at: string };
+
+/**
+ * Improve: Daedalus reads this project's recent runs and suggests skills, rules and memories,
+ * each tied to something that happened. Suggestions from any turn are listed here too.
+ */
+function ImproveSection({ projectId, refreshKey, onReview, onChanged }: { projectId: string; refreshKey: number; onReview?(): void; onChanged?(): void }) {
+  const [rows, setRows] = useState<SuggestionRow[] | null>(null);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [reload, setReload] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    api<{ suggestions: SuggestionRow[] }>(`/api/projects/${projectId}/suggestions`)
+      .then((r) => !cancelled && setRows(r.suggestions))
+      .catch(() => !cancelled && setRows([]));
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, refreshKey, reload]);
+
+  async function decide(id: string, status: "kept" | "dismissed") {
+    setRows((r) => r?.map((x) => (x.id === id ? { ...x, status } : x)) ?? r);
+    setErrors((e) => ({ ...e, [id]: "" }));
+    await api(`/api/projects/${projectId}/suggestions`, { method: "PATCH", json: { id, status } })
+      .then(() => onChanged?.())
+      .catch((err) => {
+        setErrors((e) => ({ ...e, [id]: err instanceof ApiError ? err.message : "Couldn't apply it" }));
+        setReload((n) => n + 1);
+      });
+  }
+
+  const pending = rows?.filter((r) => r.status === "proposed") ?? [];
+  const added = rows?.filter((r) => r.status === "kept").slice(0, 10) ?? [];
+  const view = (r: SuggestionRow) => ({ kind: r.kind, name: r.name, payload: r.payload, evidence: r.evidence }) as unknown as SuggestionData;
+
+  return (
+    <>
+      <section aria-labelledby="improve-h" className="agents-sec">
+        <h2 id="improve-h" className="label">Review recent runs</h2>
+        <p className="muted" style={{ margin: 0, fontSize: 14, maxWidth: 720 }}>
+          Daedalus reads this project&apos;s recent runs (what was asked, every step, the automatic checks and what you said next), looks for problems that
+          repeat, and suggests a skill, a rule or a memory for each, tied to the run that showed it. It changes nothing until you add a suggestion, and
+          &ldquo;nothing to change&rdquo; is a valid answer. You can also type <span className="mono">/review</span> in the message box.
+        </p>
+        <div>
+          <button className="btn primary" disabled={!onReview} onClick={() => onReview?.()} title={onReview ? undefined : "Wait for the current run to finish"}>
+            <Icon name="loop" size={15} /> Review recent runs
+          </button>
+        </div>
+      </section>
+
+      <section aria-labelledby="sugg-h" className="agents-sec">
+        <h2 id="sugg-h" className="label">Suggestions</h2>
+        {rows === null ? (
+          <span className="spin" />
+        ) : pending.length + added.length === 0 ? (
+          <p className="hint" style={{ margin: 0 }}>No suggestions yet. Daedalus suggests skills and rules while it works, and when you ask for a review.</p>
+        ) : (
+          <div style={{ display: "grid", gap: 8, maxWidth: 820 }}>
+            {pending.map((r) => (
+              <SuggestionView key={r.id} s={view(r)} status={r.status} error={errors[r.id]} onDecide={(st) => void decide(r.id, st)} />
+            ))}
+            {added.map((r) => (
+              <SuggestionView key={r.id} s={view(r)} status="kept" />
+            ))}
+          </div>
+        )}
+      </section>
+    </>
+  );
+}

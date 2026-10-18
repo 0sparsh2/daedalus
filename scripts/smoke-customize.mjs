@@ -21,8 +21,8 @@ const check = (name, ok, extra = "") => {
 };
 
 /** Runs one turn and returns its tool outputs by tool name. */
-async function turn(projectId, text, mode = "build") {
-  const res = await fetch(`${BASE}/api/chat`, { method: "POST", headers: auth, body: JSON.stringify({ projectId, message: { id: `u-${Date.now()}`, role: "user", parts: [{ type: "text", text }] }, mode }) });
+async function turn(projectId, text, mode = "build", intent) {
+  const res = await fetch(`${BASE}/api/chat`, { method: "POST", headers: auth, body: JSON.stringify({ projectId, message: { id: `u-${Date.now()}`, role: "user", parts: [{ type: "text", text }] }, mode, intent }) });
   const projId = res.headers.get("x-daedalus-project-id");
   const tools = [];
   const checks = [];
@@ -147,6 +147,39 @@ check(
 );
 const greet = await turn(pid, "hi @src/App.tsx", "plan");
 check("a greeting that mentions a file isn't a chat turn", greet.route !== "chat", greet.route);
+
+// Suggestions: skills and rules the agent proposes, applied only when kept
+const sug = await turn(pid, "[mock:suggest] Learn from this", "build");
+const [sSkill, sRule, sBad] = sug.tools.filter((t) => t.name === "suggest");
+check("agent suggests a skill and a rule", sSkill?.output?.ok === true && sRule?.output?.ok === true && Boolean(sSkill.output.suggestionId), JSON.stringify([sSkill?.output?.text, sRule?.output?.text]).slice(0, 120));
+check("a rule without its command is refused, with the reason", sBad?.output?.ok === false && /needs a command/.test(sBad.output.text), sBad?.output?.text);
+let sugList = (await call("GET", `/api/projects/${pid}/suggestions`)).body?.suggestions ?? [];
+check("suggestions are pending, not applied", sugList.filter((x) => x.status === "proposed").length === 2 && !(await call("GET", `/api/projects/${pid}/rules`)).body?.rules?.some((r) => r.label === "Type check before finishing"));
+const keepRule = await call("PATCH", `/api/projects/${pid}/suggestions`, { id: sRule?.output?.suggestionId, status: "kept" });
+check("keeping a rule adds it to the project's rules", keepRule.body?.ok && (await call("GET", `/api/projects/${pid}/rules`)).body?.rules?.some((r) => r.label === "Type check before finishing" && r.command === "npx tsc --noEmit"), keepRule.body?.note ?? keepRule.body?.error?.message);
+const keepSkill = await call("PATCH", `/api/projects/${pid}/suggestions`, { id: sSkill?.output?.suggestionId, status: "kept" });
+check("keeping a skill writes it to the repo", keepSkill.body?.ok && (await call("GET", `/api/projects/${pid}/skills`)).body?.project?.some((x) => x.name === "date-handling"), keepSkill.body?.note ?? keepSkill.body?.error?.message);
+const again2 = await turn(pid, "[mock:suggest] Learn from this again", "build");
+check("a kept suggestion isn't suggested again", /already has exactly this/.test(again2.tools.find((t) => t.name === "suggest")?.output?.text ?? ""));
+await call("PUT", `/api/projects/${pid}/rules`, { rules: ((await call("GET", `/api/projects/${pid}/rules`)).body?.rules ?? []).filter((r) => r.label !== "Type check before finishing") });
+
+// Text aimed at AI agents is flagged inside the tool result
+await turn(pid, "[mock:write-notes] Add the team notes", "build");
+const notesRead = (await turn(pid, "[mock:read-notes] Read the notes", "plan")).tools.find((t) => t.name === "read_file");
+check("text aimed at AI agents is flagged in the tool result", typeof notesRead?.output?.injection === "string" && /\[Daedalus: this output contains text written to instruct AI agents/.test(notesRead.output.text), notesRead?.output?.injection);
+const plain = (await turn(pid, "[mock:research-sub] Read package.json", "plan")).tools.find((t) => t.name === "research" || t.name === "read_file");
+check("ordinary files aren't flagged", plain && !plain.output?.injection, plain?.name);
+
+// Review: reads past runs on demand and suggests
+const review = await turn(pid, "[mock:review] Review my recent runs", "plan", "review");
+check("a review request is a review turn", review.route === "review", review.route);
+const rr = review.tools.find((t) => t.name === "read_run");
+check("the reviewer reads a past run in full", rr?.output?.ok === true && /## The user asked/.test(rr.output.text) && /## The user's next message/.test(rr.output.text), (rr?.output?.text ?? rr?.error ?? "").slice(0, 100));
+check("the review suggests, and changes nothing", review.tools.find((t) => t.name === "suggest")?.output?.ok === true && !review.tools.some((t) => ["write_file", "edit_file", "run_command"].includes(t.name)));
+check("the review counts the runs it could read", /Reviewed \d+ runs/.test(review.said) && Number(review.said.match(/Reviewed (\d+)/)?.[1]) >= 5, review.said.slice(0, 60));
+const review2 = await turn(pid, "[mock:review] Review again", "plan", "review");
+const rr2 = review2.tools.find((t) => t.name === "read_run");
+check("review turns aren't in the runs they review", !(rr2?.output?.text ?? "").includes("· review ·"), (rr2?.output?.text ?? "").slice(0, 80));
 
 // Kits
 const careful = await call("POST", `/api/projects/${pid}/kits`, { id: "careful" });

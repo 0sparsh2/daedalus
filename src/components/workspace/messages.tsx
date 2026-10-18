@@ -6,7 +6,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Icon } from "@/components/icons";
 import { PartBoundary } from "./part-boundary";
-import { CheckLine, CheckpointLine, MemoryCard, PlanCard, QuestionsCard, PointedChip, RouteChip, SubagentCard, ToolCard, ExploreGroup, type ToolPart, type SubagentData } from "./tool-cards";
+import { CheckLine, CheckpointLine, MemoryCard, PlanCard, QuestionsCard, PointedChip, RouteChip, SuggestionCard, SubagentCard, ToolCard, ExploreGroup, type ToolPart, type SubagentData } from "./tool-cards";
 
 type Part = UIMessage["parts"][number] & { type: string; [key: string]: unknown };
 
@@ -19,6 +19,8 @@ export function Messages({
   onAnswer,
   memoryStatus,
   onMemoryDecision,
+  suggestions,
+  onSuggestionDecision,
   onRequestChanges,
   onOpenTrace,
 }: {
@@ -28,6 +30,8 @@ export function Messages({
   onAnswer(text: string): void;
   memoryStatus: Record<string, string>;
   onMemoryDecision(id: string, status: "kept" | "dismissed"): void;
+  suggestions: Record<string, { status: string; error?: string }>;
+  onSuggestionDecision(id: string, status: "kept" | "dismissed"): void;
   onRequestChanges(): void;
   onOpenTrace(runId?: string): void;
 }) {
@@ -82,6 +86,8 @@ export function Messages({
             onAnswer={onAnswer}
             memoryStatus={memoryStatus}
             onMemoryDecision={onMemoryDecision}
+            suggestions={suggestions}
+            onSuggestionDecision={onSuggestionDecision}
             onOpenTrace={onOpenTrace}
             isLatest={i === messages.length - 1}
           />
@@ -105,6 +111,8 @@ function AssistantMessage({
   onAnswer,
   memoryStatus,
   onMemoryDecision,
+  suggestions,
+  onSuggestionDecision,
   onRequestChanges,
   onOpenTrace,
 }: {
@@ -115,6 +123,8 @@ function AssistantMessage({
   onAnswer(text: string): void;
   memoryStatus: Record<string, string>;
   onMemoryDecision(id: string, status: "kept" | "dismissed"): void;
+  suggestions: Record<string, { status: string; error?: string }>;
+  onSuggestionDecision(id: string, status: "kept" | "dismissed"): void;
   onRequestChanges(): void;
   onOpenTrace(runId?: string): void;
 }) {
@@ -165,6 +175,11 @@ function AssistantMessage({
       const tp = p as unknown as ToolPart;
       const memId = (tp.output as { memoryId?: string } | undefined)?.memoryId;
       return <MemoryCard key={b.key} part={tp} status={memId ? memoryStatus[memId] : undefined} onDecide={onMemoryDecision} />;
+    }
+    if (p.type === "tool-suggest") {
+      const tp = p as unknown as ToolPart;
+      const sid = (tp.output as { suggestionId?: string } | undefined)?.suggestionId;
+      return <SuggestionCard key={b.key} part={tp} status={sid ? suggestions[sid]?.status : undefined} error={sid ? suggestions[sid]?.error : undefined} onDecide={onSuggestionDecision} />;
     }
     if (p.type === "tool-ask_user") {
       return <QuestionsCard key={b.key} part={p as unknown as ToolPart} canAnswer={isLatest && !live} onAnswer={onAnswer} />;

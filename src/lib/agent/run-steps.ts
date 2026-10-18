@@ -17,6 +17,7 @@ import type { RouteDecision } from "./router";
 import { routeOf, type RunScope } from "./scope";
 import * as impl from "./tools/impl";
 import type { PlainPart } from "./ui-parts";
+import { recentRunsIndex, runsIndexText } from "./run-evidence";
 
 /**
  * Durable steps around the agent loop: start (provision sandbox, gather context), the
@@ -24,7 +25,7 @@ import type { PlainPart } from "./ui-parts";
  * claims), and finish (git checkpoint, persist the assistant message, close the run).
  */
 
-const RUN_NAME = { chat: "Chat", ask: "Answer", plan: "Plan run", build: "Build run" } as const;
+const RUN_NAME = { chat: "Chat", ask: "Answer", plan: "Plan run", build: "Build run", review: "Review" } as const;
 
 export async function startRunStep(scope: RunScope, projectName: string, message = ""): Promise<PromptContext> {
   "use step";
@@ -79,6 +80,7 @@ export async function startRunStep(scope: RunScope, projectName: string, message
     memoryContext(scope.userId, scope.projectId).catch(() => ({ memories: [] as string[], instructions: undefined })),
   ]);
   const pointed = await resolveMentions(handle, message, disabledSkills);
+  const runsIndex = route === "review" ? runsIndexText(await recentRunsIndex(scope.projectId, scope.runId)) : undefined;
   if (pointed && (pointed.files.length || pointed.skills.length || pointed.missing.length)) {
     await emit({ type: "message-metadata", messageMetadata: { pointed: pointedSummary(pointed) } });
   }
@@ -94,6 +96,7 @@ export async function startRunStep(scope: RunScope, projectName: string, message
     userInstructions: mem.instructions,
     memories: mem.memories,
     pointed,
+    runsIndex,
   };
 }
 

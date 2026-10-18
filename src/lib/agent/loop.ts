@@ -13,7 +13,7 @@ import type { LanguageModelV4Message, LanguageModelV4Prompt } from "@ai-sdk/prov
  *    tools are switched off, so a long run always ends with a summary instead of mid-action.
  */
 
-export const STEP_LIMIT = { chat: 1, ask: 20, plan: 24, build: 70 } as const;
+export const STEP_LIMIT = { chat: 1, ask: 20, plan: 24, build: 70, review: 30 } as const;
 const KEEP_RECENT_TOOL_RESULTS = 8;
 
 export function estimateTokens(messages: LanguageModelV4Prompt): number {

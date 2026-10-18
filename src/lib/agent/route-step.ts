@@ -72,7 +72,7 @@ export async function routeTurnStep(
   return decision;
 }
 
-const AGENT_LABEL = { chat: "chat", ask: "answer", plan: "planner", build: "builder" } as const;
+const AGENT_LABEL = { chat: "chat", ask: "answer", plan: "planner", build: "builder", review: "reviewer" } as const;
 
 /** A run token labelled with the agent the router chose, so the trace names who made each model call. */
 export async function agentTokenStep(scope: RunScope, route: RouteDecision["route"]): Promise<string> {

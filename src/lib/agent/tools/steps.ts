@@ -3,6 +3,11 @@ import { requestPreviewReload } from "../emit";
 import { runSubagent } from "../subagents";
 import { callConnectionTool } from "@/lib/mcp/connections";
 import { proposeMemory } from "@/lib/memory/memory";
+import { normalizeSuggestion, type SuggestInput } from "@/lib/suggestions";
+import { proposeSuggestion } from "@/lib/suggestions-store";
+import { listProjectSkills } from "@/lib/skills/project";
+import { builtinSkill } from "@/lib/skills/builtin";
+import { runTranscript } from "../run-evidence";
 import { runTool, stableId, ToolError, truncateMiddle } from "../runtime";
 import type { SandboxHandle } from "@/lib/sandbox";
 import { loadSkill } from "@/lib/skills/project";
@@ -173,6 +178,46 @@ export async function rememberStep(input: { text: string; scope?: "project" | "m
           : "Already proposed; the user hasn't decided yet."
         : "Proposed to the user. It's used in future turns only if they keep it; carry on with the task.";
       return { ok: true, text, memoryId: r.id, status: r.status };
+    },
+    { sandbox: false, kind: "system" },
+  );
+}
+
+export async function suggestStep(input: SuggestInput, ctx: Ctx) {
+  "use step";
+  return runTool(
+    "suggest",
+    { kind: input.kind, name: input.name },
+    ctx,
+    async (sbx) => {
+      const s = normalizeSuggestion(input);
+      if ("error" in s) throw new ToolError(s.error);
+      // A skill with an existing name replaces it when kept; say so on the card.
+      let replaces: string | undefined;
+      if (s.kind === "skill") {
+        const existing = (await listProjectSkills(sbx).catch(() => [])).find((k) => k.name === s.name);
+        replaces = existing ? "project" : builtinSkill(s.name) ? "builtin" : undefined;
+      }
+      const r = await proposeSuggestion({ userId: ctx.scope.userId, projectId: ctx.scope.projectId, runId: ctx.scope.runId, suggestion: s });
+      const text =
+        r.status === "kept" ? "The project already has exactly this; no need to suggest it again." : `Suggested to the user${r.duplicate ? " (updating your earlier suggestion)" : ""}. It applies only if they keep it; carry on.`;
+      return { ok: true, text, suggestionId: r.id, status: r.status, kind: s.kind, replaces };
+    },
+    { kind: "system" },
+  );
+}
+
+export async function readRunStep(input: { runId: string }, ctx: Ctx) {
+  "use step";
+  return runTool(
+    "read_run",
+    input,
+    ctx,
+    async () => {
+      const id = input.runId.trim();
+      const text = /^[0-9a-f-]{36}$/i.test(id) && id !== ctx.scope.runId ? await runTranscript(ctx.scope.projectId, id) : null;
+      if (!text) throw new ToolError(`No run ${id} in this project. Use an id from the Recent runs list.`);
+      return { ok: true, text };
     },
     { sandbox: false, kind: "system" },
   );
