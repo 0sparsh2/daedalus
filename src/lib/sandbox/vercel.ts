@@ -8,8 +8,20 @@ import { resolveInRoot, shellQuote, type ExecOptions, type ExecResult, type Sand
  * Auth: OIDC automatically on Vercel; locally `vercel env pull`, or VERCEL_TOKEN + team/project.
  */
 
+/**
+ * The app's root in the microVM. Vercel's legacy runtimes started in /vercel/sandbox; the
+ * current default image (vercel/sandbox/universal) starts in /vercel, which its `ubuntu` user
+ * owns, and has no /vercel/sandbox. So the root is created explicitly before any command uses it
+ * as a working directory (see ensureRoot).
+ */
 const ROOT = "/vercel/sandbox";
 const SESSION_TIMEOUT_MS = Number(process.env.SANDBOX_SESSION_TIMEOUT_MS ?? 30 * 60_000);
+
+/** Creates the app root, from a directory that always exists. Every run starts with getOrCreate, so this covers older sandboxes too. */
+async function ensureRoot(sbx: Sandbox) {
+  const r = await sbx.runCommand({ cmd: "mkdir", args: ["-p", ROOT], cwd: "/" });
+  if (r.exitCode !== 0) throw new Error(`Couldn't create ${ROOT} in the sandbox: ${(await r.stderr()).slice(0, 300)}`);
+}
 
 function credentials() {
   const token = process.env.VERCEL_SANDBOX_TOKEN ?? process.env.VERCEL_TOKEN;
@@ -136,6 +148,7 @@ export const vercelProvider: SandboxProvider = {
     const sbx = templateSnapshot
       ? await Sandbox.getOrCreate({ ...common, source: { type: "snapshot", snapshotId: templateSnapshot } })
       : await Sandbox.getOrCreate(common);
+    await ensureRoot(sbx);
     return { handle: new VercelSandbox(name, sbx), created };
   },
 };

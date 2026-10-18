@@ -21,8 +21,10 @@ const files = [];
 const creds = process.env.VERCEL_TOKEN ? { token: process.env.VERCEL_TOKEN, teamId: process.env.VERCEL_TEAM_ID, projectId: process.env.VERCEL_PROJECT_ID } : {};
 const t0 = Date.now();
 const sbx = await Sandbox.create({ ports: [5173], timeout: 15 * 60_000, resources: { vcpus: 2 }, persistent: false, ...creds });
+// The current default image starts in /vercel and has no /vercel/sandbox yet.
+await sbx.runCommand({ cmd: "mkdir", args: ["-p", "/vercel/sandbox"], cwd: "/" });
 const run = async (cmd) => {
-  const r = await sbx.runCommand({ cmd: "bash", args: ["-lc", cmd], cwd: "/vercel/sandbox" });
+  const r = await sbx.runCommand({ cmd: "bash", args: ["-lc", cmd], cwd: "/vercel/sandbox" }); // created below, before the first command
   const out = (await r.stdout()) + (await r.stderr());
   if (r.exitCode !== 0) throw new Error(`${cmd} failed (${r.exitCode}):\n${out.slice(-2000)}`);
   return out;
