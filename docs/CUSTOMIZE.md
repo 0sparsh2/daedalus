@@ -10,6 +10,18 @@ The **Customize** tab in a project sets how Daedalus works on it. Everything use
 | Instructions & memory | Your preferences, and facts you chose to keep | `profiles.instructions`, `memories` table | Requested: loaded into every prompt |
 | Kits | One-click bundles of the above | Installs into the sections above | — |
 
+## From the message box
+
+| Type | What it does |
+| --- | --- |
+| `@` | Suggests the project's files. A mentioned file is loaded into that turn's prompt with line numbers (up to 400 lines and 20 KB a file, 60 KB a turn). A file that doesn't exist is reported to the agent and on the reply. |
+| `/` | Suggests skills, and the `/plan` and `/build` commands. A mentioned skill's full instructions are loaded into that turn, so the agent doesn't have to decide to load it. A switched-off skill is skipped, and so is any other `/word` (it's usually a route, like "the /settings page"). |
+| `/plan`, `/build` | Pick the mode for that message. On its own, the command just switches the mode. `/build` also counts as "build this", like pressing Start building. |
+| **+** | The same `@` and `/`, plus shortcuts to Connections, Rules that always run, and the rest of Customize. |
+
+- **On the reply:** a chip shows what the message loaded, for example "Using /forms, @App.tsx". It's saved with the reply, and its tooltip lists anything that wasn't found.
+- **Routing:** a message that mentions files or skills is never a chat-only turn. It's at least a question, so the run opens the project.
+
 ## Connections (MCP)
 
 - **Adding one:** give a name, the server's address and an optional token. Daedalus checks the address (https only, no private network addresses), connects, lists the server's tools and caches them. Tokens are encrypted with AES-256-GCM, using the user id as authenticated data, and are never sent back to the browser.
@@ -57,10 +69,16 @@ Installing keeps whatever the project already has, and each part stays editable 
 
 ## Tests
 
-- `node scripts/smoke-customize.mjs`: 35 checks with the scripted model. It covers:
+- `node scripts/smoke-customize.mjs`: 39 checks with the scripted model. It covers:
   - skills: saving, loading, a switched-off skill being refused, deleting;
   - rules: a command being blocked, after-change output, a failed check followed by a passing one;
   - connections: real calls to Context7 and DeepWiki, read-only gating, refused addresses, tokens never returned;
   - memory: proposed memories staying out of the prompt, and kept ones and your instructions reaching it;
   - kits.
+  - mentions: a file and a skill reaching the prompt, a switched-off skill and a missing file, and what the reply records.
+- `node scripts/smoke-composer.mjs` runs in a browser with the scripted model. It covers:
+  - `@` and `/` suggestions, picking one with Enter or Tab;
+  - the + menu opening Customize at the right section;
+  - mentions highlighted in your message, and the "Using …" chip on the reply;
+  - `/plan` on its own switching the mode without sending.
 - `node scripts/smoke-customize-real.mjs` is the same flow on a real NIM model.

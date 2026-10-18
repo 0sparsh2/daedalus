@@ -346,6 +346,19 @@ export function RouteChip({ data }: { data: { route: string; by: string; reason:
   );
 }
 
+/** What the message pointed at and the run loaded into this turn: @files and /skills. */
+export function PointedChip({ data }: { data: { files: string[]; skills: string[]; missing: string[] } }) {
+  const used = [...data.skills.map((s) => `/${s}`), ...data.files.map((f) => `@${f}`)];
+  if (!used.length && !data.missing.length) return null;
+  const title = [used.length ? `Loaded into this turn: ${used.join(", ")}` : "", data.missing.length ? `Not found: ${data.missing.join(", ")}` : ""].filter(Boolean).join("\n");
+  return (
+    <span className="route-chip" title={title}>
+      <Icon name={data.missing.length && !used.length ? "alert" : "file"} size={12} />
+      {used.length ? `Using ${used.length <= 2 ? used.map((u) => u.replace(/^@.*\//, "@")).join(", ") : `${used.length} mentions`}` : `${data.missing[0]} not found`}
+    </span>
+  );
+}
+
 /** ask_user: the agent's questions with suggested answers. Answering sends them as the next message. */
 export function QuestionsCard({ part, canAnswer, onAnswer }: { part: ToolPart; canAnswer: boolean; onAnswer(text: string): void }) {
   const [picked, setPicked] = useState<Record<number, string>>({});

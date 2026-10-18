@@ -1,11 +1,12 @@
 "use client";
+import { splitMentions } from "@/lib/mentions";
 import type { UIMessage } from "ai";
 import { useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Icon } from "@/components/icons";
 import { PartBoundary } from "./part-boundary";
-import { CheckLine, CheckpointLine, MemoryCard, PlanCard, QuestionsCard, RouteChip, SubagentCard, ToolCard, ExploreGroup, type ToolPart, type SubagentData } from "./tool-cards";
+import { CheckLine, CheckpointLine, MemoryCard, PlanCard, QuestionsCard, PointedChip, RouteChip, SubagentCard, ToolCard, ExploreGroup, type ToolPart, type SubagentData } from "./tool-cards";
 
 type Part = UIMessage["parts"][number] & { type: string; [key: string]: unknown };
 
@@ -61,7 +62,15 @@ export function Messages({
       {messages.map((m, i) =>
         m.role === "user" ? (
           <div key={m.id} className="msg-user">
-            {(m.parts as Part[]).filter((p) => p.type === "text").map((p) => String(p.text)).join("\n")}
+            {splitMentions((m.parts as Part[]).filter((p) => p.type === "text").map((p) => String(p.text)).join("\n")).map((seg, j) =>
+              seg.kind ? (
+                <span key={j} className="mention" title={seg.kind === "file" ? "File loaded into this turn" : "Skill loaded into this turn"}>
+                  {seg.text}
+                </span>
+              ) : (
+                seg.text
+              ),
+            )}
           </div>
         ) : (
           <AssistantMessage
@@ -115,6 +124,7 @@ function AssistantMessage({
   for (const p of parts) if (p.type === "data-subagent" && typeof p.id === "string") subagents.set(p.id, p.data as SubagentData);
   const status = [...parts].reverse().find((p) => p.type === "data-status")?.data as { stage: string; note: string } | undefined;
   const route = (message.metadata as { route?: { route: string; by: string; reason: string } } | undefined)?.route;
+  const pointed = (message.metadata as { pointed?: { files: string[]; skills: string[]; missing: string[] } } | undefined)?.pointed;
 
   // Group consecutive read-only tool calls into one "Explored" line.
   const blocks: Array<{ kind: "part"; part: Part; key: string } | { kind: "explore"; parts: ToolPart[]; key: string }> = [];
@@ -185,6 +195,7 @@ function AssistantMessage({
       <div className="who">
         <span className="brand-mark" style={{ width: 16, height: 16 }} aria-hidden="true" /> Daedalus
         {route && <RouteChip data={route} />}
+        {pointed && <PointedChip data={pointed} />}
         {runId && (
           <button className="btn ghost sm" style={{ marginLeft: "auto" }} onClick={() => onOpenTrace(runId)} title="See every model call and tool call in this run">
             <Icon name="flow" size={13} /> Trace

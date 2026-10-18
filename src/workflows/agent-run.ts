@@ -7,7 +7,7 @@ import { askPrompt, buildPrompt, chatPrompt, planPrompt, type PromptContext } fr
 import { repairToolCall } from "@/lib/agent/repair";
 import { agentTokenStep, routeTurnStep } from "@/lib/agent/route-step";
 import type { Intent, Route } from "@/lib/agent/router";
-import { finalCheckStep, finishRunStep, isCancelledStep, startRunStep } from "@/lib/agent/run-steps";
+import { finalCheckStep, finishRunStep, isCancelledStep, pointedSummary, startRunStep } from "@/lib/agent/run-steps";
 import type { RunScope } from "@/lib/agent/scope";
 import { ASK_TOOLS, BUILD_TOOLS, PLAN_TOOLS, buildTools, type ToolName } from "@/lib/agent/tools";
 import { mcpToolStep } from "@/lib/agent/tools/steps";
@@ -69,7 +69,7 @@ export async function agentRun(input: AgentRunInput) {
 
   let context: PromptContext;
   try {
-    context = await startRunStep(scope, input.projectName);
+    context = await startRunStep(scope, input.projectName, facts.text);
   } catch (err) {
     error = `Couldn't prepare the sandbox: ${err instanceof Error ? err.message : String(err)}`;
     await finishRunStep(scope, { outcome: "failed", error, parts, assistantMessageId: input.assistantMessageId, route: decision });
@@ -156,7 +156,8 @@ export async function agentRun(input: AgentRunInput) {
     error = describeError(err);
   }
 
-  await finishRunStep(scope, { outcome, error, parts, assistantMessageId: input.assistantMessageId, planTitle, route: decision });
+  const pointed = context.pointed && (context.pointed.files.length || context.pointed.skills.length || context.pointed.missing.length) ? pointedSummary(context.pointed) : undefined;
+  await finishRunStep(scope, { outcome, error, parts, assistantMessageId: input.assistantMessageId, planTitle, route: decision, pointed });
   return { outcome, route };
 }
 

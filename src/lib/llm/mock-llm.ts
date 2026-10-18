@@ -170,6 +170,14 @@ export function pickTurn(messages: ChatMessage[], toolNames: string[]): MockTurn
     const section = (title: string) => system.split(`# ${title}`)[1]?.split("\n# ")[0]?.trim() ?? "(missing)";
     return { text: `INSTRUCTIONS: ${section("The user's instructions (for all their projects)")}\nMEMORY: ${section("What the user asked you to remember")}` };
   }
+  // Test-only: reply with what the message's @files and /skills loaded into the prompt.
+  if (scenario === "mention-echo") {
+    const system = textOf(messages.find((m) => m.role === "system")?.content);
+    const files = [...system.matchAll(/<file path="([^"]+)">\n([^\n]*)/g)].map((m) => `${m[1]} → ${m[2]}`);
+    const skills = system.split("# Skills the user asked you to use for this request")[1]?.split("\n# ")[0] ?? "";
+    const skillNames = [...skills.matchAll(/^## (\S+)/gm)].map((m) => m[1]);
+    return { text: `FILES: ${files.join(" | ") || "(none)"}\nSKILLS: ${skillNames.join(", ") || "(none)"}` };
+  }
   const script = scenario ? MOCK_SCENARIOS[scenario] : undefined;
   if (script) {
     // Harness-injected messages (automatic checks) don't restart the script.

@@ -4,7 +4,7 @@ import { Icon } from "@/components/icons";
 import { ApiError, api } from "@/lib/client/api";
 import { describeRule, type Rule, type RulePreset } from "@/lib/rules";
 
-type Section = "kits" | "connections" | "skills" | "rules" | "memory";
+export type Section = "kits" | "connections" | "skills" | "rules" | "memory";
 
 const SECTIONS: Array<[Section, string]> = [
   ["kits", "Kits"],
@@ -18,8 +18,18 @@ const SECTIONS: Array<[Section, string]> = [
  * Customize: how Daedalus works on this project. Everything here is a standard, portable
  * format (SKILL.md files in the repo, AGENTS.md, MCP servers), so nothing is locked in.
  */
-export function CustomizePanel({ projectId, hasSandbox, refreshKey }: { projectId: string; hasSandbox: boolean; refreshKey: number }) {
-  const [section, setSection] = useState<Section>("connections");
+export function CustomizePanel({
+  projectId,
+  hasSandbox,
+  refreshKey,
+  initialSection = "connections",
+}: {
+  projectId: string;
+  hasSandbox: boolean;
+  refreshKey: number;
+  initialSection?: Section;
+}) {
+  const [section, setSection] = useState<Section>(initialSection);
   return (
     <div className="agents">
       <div className="mode" role="group" aria-label="Customize sections" style={{ justifySelf: "start" }}>

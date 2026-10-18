@@ -23,6 +23,17 @@ export interface PromptContext {
   /** The user's instructions for all projects, and the memories they chose to keep. */
   userInstructions?: string;
   memories?: string[];
+  /** What the user's message pointed at: @files (loaded) and /skills (to follow). */
+  pointed?: { files: Array<{ path: string; text: string }>; skills: Array<{ name: string; body: string }>; missing: string[] };
+}
+
+function pointedSection(p: PromptContext["pointed"]): string {
+  if (!p || (!p.files.length && !p.skills.length && !p.missing.length)) return "";
+  const parts: string[] = [];
+  if (p.skills.length) parts.push(`# Skills the user asked you to use for this request\nFollow them.\n\n${p.skills.map((s) => `## ${s.name}\n${s.body}`).join("\n\n")}`);
+  if (p.files.length) parts.push(`# Files the user pointed at (with line numbers)\n${p.files.map((f) => `<file path="${f.path}">\n${f.text}\n</file>`).join("\n")}`);
+  if (p.missing.length) parts.push(`# Mentioned but not found\n${p.missing.join(", ")}. Tell the user if it matters.`);
+  return `\n${parts.join("\n\n")}\n`;
 }
 
 function memorySection(c: { userInstructions?: string; memories?: string[] }, canPropose = true): string {
@@ -56,7 +67,7 @@ const ENVIRONMENT = (c: PromptContext) => `# Environment
 # Project: ${c.projectName}
 Files right now:
 ${c.fileTree || "(empty)"}
-${c.recentCommits ? `\nRecent versions:\n${c.recentCommits}\n` : ""}${c.agentsMd ? `\n# Project instructions (AGENTS.md)\n${c.agentsMd}\n` : ""}${c.skills?.length ? `\n${skillIndex(c.skills)}` : ""}${connectionsSection(c.connections)}${memorySection(c)}`;
+${c.recentCommits ? `\nRecent versions:\n${c.recentCommits}\n` : ""}${c.agentsMd ? `\n# Project instructions (AGENTS.md)\n${c.agentsMd}\n` : ""}${c.skills?.length ? `\n${skillIndex(c.skills)}` : ""}${connectionsSection(c.connections)}${memorySection(c)}${pointedSection(c.pointed)}`;
 
 export function buildPrompt(c: PromptContext): string {
   return `You are Daedalus, an expert product engineer who builds working web apps from plain-language requests. You turn ideas into polished, responsive React apps and you finish what you start.

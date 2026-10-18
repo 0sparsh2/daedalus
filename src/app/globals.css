@@ -177,6 +177,13 @@ button.chip:hover:not(:disabled) { border-color: var(--muted); }
 .pop .opt[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .pop .opt .meta { margin-left: auto; font-size: 12px; color: var(--faint); }
 .pop .lockrow { display: flex; align-items: center; gap: 8px; padding: 6px 8px; font-size: 13px; color: var(--muted); }
+.plus-pop { left: 0; bottom: calc(100% + 6px); }
+.suggest { position: absolute; left: 8px; right: 8px; bottom: calc(100% + 6px); z-index: 40; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-2); box-shadow: var(--shadow-lg); padding: 4px; max-height: 280px; overflow: auto; }
+.suggest-opt { display: flex; gap: 10px; align-items: baseline; padding: 7px 10px; border-radius: var(--r-1); cursor: pointer; font-size: 14px; min-height: 36px; }
+.suggest-opt[aria-selected="true"] { background: var(--accent-soft); }
+.suggest-hint { font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.suggest-empty { display: flex; gap: 8px; align-items: center; padding: 8px 10px; color: var(--muted); font-size: 13.5px; }
+.mention { font-family: var(--mono); font-size: 0.92em; background: var(--accent-soft); color: var(--accent); border-radius: 4px; padding: 0 4px; }
 .scrim { position: fixed; inset: 0; background: rgba(14, 17, 22, 0.42); z-index: 60; display: grid; place-items: center; padding: 16px; }
 .dialog { background: var(--surface); border-radius: var(--r-3); box-shadow: var(--shadow-lg); width: min(460px, 100%); max-height: calc(100vh - 32px); overflow: auto; padding: 24px; display: grid; gap: 16px; position: relative; }
 .dialog.wide { width: min(640px, 100%); }
@@ -209,7 +216,7 @@ button.chip:hover:not(:disabled) { border-color: var(--muted); }
 .chat-foot { padding: 8px 12px 12px; display: grid; gap: 8px; }
 .msg-user { justify-self: end; max-width: 88%; background: var(--sunk); border-radius: 12px 12px 3px 12px; padding: 8px 12px; font-size: 14.5px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .msg-ai { display: grid; gap: 8px; min-width: 0; }
-.msg-ai .who { font-size: 12px; color: var(--muted); font-weight: 600; display: flex; gap: 6px; align-items: center; }
+.msg-ai .who { font-size: 12px; color: var(--muted); font-weight: 600; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .prose { font-size: 14.5px; line-height: 1.6; min-width: 0; overflow-wrap: anywhere; }
 .prose p { margin: 0 0 8px; }
 .prose p:last-child { margin-bottom: 0; }
@@ -256,7 +263,7 @@ button.chip:hover:not(:disabled) { border-color: var(--muted); }
 .subagent .sa-sum { border-top: 1px solid var(--line); padding: 8px 10px; }
 .plan-card { border: 1px solid var(--accent); border-radius: var(--r-3); background: var(--surface); padding: 14px 16px; display: grid; gap: 10px; }
 .chip[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 600; }
-.route-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 500; color: var(--muted); background: var(--sunk); border-radius: 999px; padding: 2px 8px; }
+.route-chip { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; font-size: 12px; font-weight: 500; color: var(--muted); background: var(--sunk); border-radius: 999px; padding: 2px 8px; }
 .qa-card { display: grid; gap: 12px; border: 1px solid var(--line-strong); border-radius: var(--r-3); padding: 14px 16px; background: var(--surface); }
 .qa-q { display: grid; gap: 8px; }
 .qa-question { margin: 0; font-weight: 600; }

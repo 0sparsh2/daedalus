@@ -3,6 +3,7 @@ import { useChat } from "@ai-sdk/react";
 import { WorkflowChatTransport } from "@ai-sdk/workflow/client";
 import type { UIMessage } from "ai";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { parseMentions } from "@/lib/mentions";
 import { Composer, type RunMode } from "@/components/composer";
 import { Brand, Icon } from "@/components/icons";
 import { UserMenu } from "@/components/user-menu";
@@ -12,7 +13,7 @@ import { AgentsPanel } from "./agents-panel";
 import { CodePanel } from "./code-panel";
 import { Messages } from "./messages";
 import { PlanPanel } from "./plan-panel";
-import { CustomizePanel } from "./customize-panel";
+import { CustomizePanel, type Section as CustomizeSection } from "./customize-panel";
 import { PreviewPanel, type PreviewError, type SelectedElement } from "./preview-panel";
 import { ShipMenu } from "./ship-menu";
 import { TracePanel } from "./trace-panel";
@@ -91,6 +92,8 @@ export function Workspace({
   // Set when the agent's preview check asks for a fresh load of the open preview.
   const [checkId, setCheckId] = useState<string | undefined>();
   const [tab, setTab] = useState<Tab>("preview");
+  // Which Customize section to open on, when the composer's + menu points at one.
+  const [customizeAt, setCustomizeAt] = useState<{ section?: CustomizeSection; n: number }>({ n: 0 });
   const [view, setView] = useState<"chat" | "panel">("chat");
   const [mode, setMode] = useState<RunMode>(initialMode ?? (initialMessages.length === 0 ? "plan" : "build"));
   const [runMode, setRunMode] = useState<RunMode>((activeRun?.mode as RunMode | undefined) ?? initialMode ?? "build");
@@ -194,8 +197,20 @@ export function Workspace({
 
   const send = useCallback(
     async (text: string, overrideMode?: RunMode, intent?: "build" | "answer") => {
-      const t = text.trim();
-      if (!t || running) return;
+      // /plan and /build pick the mode for this message; the command itself isn't sent.
+      const { commands } = parseMentions(text);
+      const command = commands.includes("build") ? "build" : commands.includes("plan") ? "plan" : undefined;
+      const t = (command ? text.replace(/(^|\s)\/(plan|build)(?=$|[\s.,!?;:])/g, "$1") : text).trim();
+      if (command && !overrideMode) {
+        overrideMode = command;
+        if (command === "build") intent ??= "build";
+      }
+      if (!t) {
+        if (command) setMode(command);
+        setInput("");
+        return;
+      }
+      if (running) return;
       if (!(await ensureReady({ reason: "Connect a model to keep building." }))) return;
       const useMode = overrideMode ?? mode;
       if (overrideMode) setMode(overrideMode);
@@ -340,8 +355,14 @@ export function Workspace({
               onModeChange={setMode}
               running={running}
               onStop={() => void stop()}
-              placeholder={messages.length ? "Ask for a change, or describe the next feature…" : "Describe what you want to build…"}
+              placeholder={messages.length ? "Ask for a change or the next feature · @ files · / skills" : "Describe what you want to build…"}
               label="Message Daedalus"
+              projectId={project.id}
+              onOpenCustomize={(section) => {
+                setCustomizeAt((c) => ({ section, n: c.n + 1 }));
+                setTab("customize");
+                setView("panel");
+              }}
             />
           </div>
         </section>
@@ -380,7 +401,9 @@ export function Workspace({
             {tab === "trace" && <TracePanel projectId={project.id} runId={traceRunId} onSelectRun={setTraceRunId} live={running} />}
             {tab === "plan" && <PlanPanel messages={messages} onStartBuild={startBuild} running={running} />}
             {tab === "agents" && <AgentsPanel projectId={project.id} refreshKey={refreshKey} hasSandbox={Boolean(previewUrl)} />}
-            {tab === "customize" && <CustomizePanel projectId={project.id} refreshKey={refreshKey} hasSandbox={Boolean(previewUrl)} />}
+            {tab === "customize" && (
+              <CustomizePanel key={customizeAt.n} projectId={project.id} refreshKey={refreshKey} hasSandbox={Boolean(previewUrl)} initialSection={customizeAt.section} />
+            )}
           </div>
         </section>
       </div>

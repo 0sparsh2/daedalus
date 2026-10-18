@@ -27,6 +27,7 @@ async function turn(projectId, text, mode = "build") {
   const tools = [];
   const checks = [];
   let said = "";
+  let route;
   const names = new Map();
   let buf = "";
   for await (const chunk of res.body) {
@@ -42,9 +43,10 @@ async function turn(projectId, text, mode = "build") {
       if (e.type === "tool-output-available") tools.push({ ...names.get(e.toolCallId), output: e.output });
       if (e.type === "data-check" && e.data?.status !== "running") checks.push(e.data);
       if (e.type === "text-delta") said += e.delta;
+      if (e.type === "message-metadata" && e.messageMetadata?.route) route = e.messageMetadata.route.route;
     }
   }
-  return { projectId: projId, tools, checks, said };
+  return { projectId: projId, tools, checks, said, route };
 }
 
 await call("POST", "/api/credentials", { provider: "mock", apiKey: "mock-key-for-tests", model: "mock-builder" });
@@ -132,6 +134,19 @@ await call("PATCH", `/api/projects/${pid}/memories`, { id: rem?.output?.memoryId
 mems = await call("GET", `/api/projects/${pid}/memories`);
 check("forgotten memory is gone", !mems.body?.memories?.some((m) => m.id === rem?.output?.memoryId));
 await call("PUT", "/api/me/instructions", { instructions: "" });
+
+// Mentions: @files and /skills in a message load into that turn
+const pointed = await turn(pid, "[mock:mention-echo] Look at @src/App.tsx and @src/nope.tsx, use /forms (and /charts, which is off), and keep the /settings page", "plan");
+check("a mentioned file reaches the prompt with line numbers", /FILES: src\/App\.tsx → 1: /.test(pointed.said), pointed.said.slice(0, 120));
+check("a mentioned skill reaches the prompt, and a switched-off one doesn't", /SKILLS: forms$/.test(pointed.said), pointed.said.split("\n").pop());
+const pointedMsg = (await admin.from("messages").select("metadata").eq("project_id", pid).eq("role", "assistant").order("created_at", { ascending: false }).limit(1).single()).data;
+check(
+  "the reply records what it loaded, and what wasn't found",
+  JSON.stringify(pointedMsg?.metadata?.pointed) === JSON.stringify({ files: ["src/App.tsx"], skills: ["forms"], missing: ["@src/nope.tsx"] }),
+  JSON.stringify(pointedMsg?.metadata?.pointed),
+);
+const greet = await turn(pid, "hi @src/App.tsx", "plan");
+check("a greeting that mentions a file isn't a chat turn", greet.route !== "chat", greet.route);
 
 // Kits
 const careful = await call("POST", `/api/projects/${pid}/kits`, { id: "careful" });

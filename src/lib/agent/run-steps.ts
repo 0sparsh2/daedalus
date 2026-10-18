@@ -5,7 +5,9 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { endSpan, recordSpan, startSpan } from "@/lib/trace/spans";
 import { connectionTools } from "@/lib/mcp/connections";
 import { memoryContext } from "@/lib/memory/memory";
-import { skillsForRun } from "@/lib/skills/project";
+import { parseMentions } from "@/lib/mentions";
+import { loadSkill, skillsForRun } from "@/lib/skills/project";
+import type { SandboxHandle } from "@/lib/sandbox";
 import { emit, requestPreviewReload } from "./emit";
 import { projectRules, runBeforeFinish } from "./rules-run";
 import { versionTitle } from "./history";
@@ -24,7 +26,7 @@ import type { PlainPart } from "./ui-parts";
 
 const RUN_NAME = { chat: "Chat", ask: "Answer", plan: "Plan run", build: "Build run" } as const;
 
-export async function startRunStep(scope: RunScope, projectName: string): Promise<PromptContext> {
+export async function startRunStep(scope: RunScope, projectName: string, message = ""): Promise<PromptContext> {
   "use step";
   const db = supabaseAdmin();
   const route = routeOf(scope);
@@ -76,6 +78,10 @@ export async function startRunStep(scope: RunScope, projectName: string): Promis
     connectionTools(scope.projectId).catch(() => []),
     memoryContext(scope.userId, scope.projectId).catch(() => ({ memories: [] as string[], instructions: undefined })),
   ]);
+  const pointed = await resolveMentions(handle, message, disabledSkills);
+  if (pointed && (pointed.files.length || pointed.skills.length || pointed.missing.length)) {
+    await emit({ type: "message-metadata", messageMetadata: { pointed: pointedSummary(pointed) } });
+  }
   return {
     projectName,
     fileTree: tree.text,
@@ -87,7 +93,43 @@ export async function startRunStep(scope: RunScope, projectName: string): Promis
     connections,
     userInstructions: mem.instructions,
     memories: mem.memories,
+    pointed,
   };
+}
+
+/** Loads what the message points at: @files (line-numbered, capped) and /skills (their instructions). */
+async function resolveMentions(handle: SandboxHandle, message: string, disabledSkills: string[]): Promise<PromptContext["pointed"]> {
+  const { files, skills } = parseMentions(message);
+  const out: NonNullable<PromptContext["pointed"]> = { files: [], skills: [], missing: [] };
+  let budget = 60_000;
+  for (const path of files) {
+    const r = await impl.readFile(handle, { path, limit: 400 }).catch((e: Error) => ({ ok: false, text: e.message }));
+    if (!r.ok || budget <= 0) {
+      out.missing.push(`@${path}`);
+      continue;
+    }
+    // read_file's output starts with the path, which the <file> tag already carries.
+    const text = r.text.replace(/^[^\n]*\n/, "").slice(0, Math.min(20_000, budget));
+    budget -= text.length;
+    out.files.push({ path, text });
+  }
+  for (const name of skills) {
+    const found = await loadSkill(handle, name, disabledSkills).catch(() => null);
+    // An unknown /name is usually a route ("the /settings page"), not a skill, so it's left alone.
+    if (found) out.skills.push({ name: found.skill.name, body: found.skill.body });
+  }
+  return out;
+}
+
+/** What a turn loaded from mentions, without the contents: shown on the reply and saved with it. */
+export function pointedSummary(p: NonNullable<PromptContext["pointed"]>): PointedSummary {
+  return { files: p.files.map((f) => f.path), skills: p.skills.map((s) => s.name), missing: p.missing };
+}
+
+export interface PointedSummary {
+  files: string[];
+  skills: string[];
+  missing: string[];
 }
 
 export async function isCancelledStep(scope: RunScope): Promise<boolean> {
@@ -156,6 +198,8 @@ export interface FinishInput {
   planTitle?: string;
   /** The turn router's decision, saved with the message so the UI can show which agent answered. */
   route?: RouteDecision;
+  /** Files and skills the message mentioned and the run loaded. */
+  pointed?: PointedSummary;
 }
 
 export async function finishRunStep(scope: RunScope, input: FinishInput) {
@@ -196,7 +240,7 @@ export async function finishRunStep(scope: RunScope, input: FinishInput) {
     role: "assistant",
     parts,
     run_id: scope.runId,
-    metadata: { runId: scope.runId, model: scope.model, provider: scope.provider, mode: scope.mode, route: input.route ?? { route: routeOf(scope), by: "default", reason: "" } },
+    metadata: { runId: scope.runId, model: scope.model, provider: scope.provider, mode: scope.mode, route: input.route ?? { route: routeOf(scope), by: "default", reason: "" }, pointed: input.pointed },
   });
 
   const summary = ([...input.parts].reverse().find((p) => p.type === "text")?.text as string | undefined)?.slice(0, 500) ?? null;

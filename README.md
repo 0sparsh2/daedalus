@@ -8,7 +8,7 @@ Daedalus is a vibe-coding platform for both non-technical and technical builders
 - **Live preview.** Every project gets its own sandbox microVM running a real dev server. You watch the UI get built, hot-reloading as the agent edits files.
 - **It checks its own work.** A build only finishes when the app type-checks, builds and renders. Failures go back to the agent automatically, and you see "Automatic check found 2 problems; Daedalus is fixing them."
 - **Your keys, your models.** Bring an Anthropic, OpenAI, DeepSeek or NVIDIA NIM key at sign-up. It's validated and encrypted, and only the Daedalus gateway ever uses it. Switch models at any time; providers without a key show as locked.
-- **Customize it.** Connect MCP servers, add skills as `SKILL.md` files, set rules the harness always enforces, keep memories Daedalus proposes, or install a kit that does all of it at once.
+- **Customize it.** Connect MCP servers, add skills as `SKILL.md` files, set rules the harness always enforces, keep memories Daedalus proposes, or install a kit that does all of it at once. In the message box, `@` points at a file, `/` uses a skill, and + opens the rest.
 - **Sub-agents and a full trace.** The agent delegates research and codebase exploration to sub-agents with their own context. Every model call, tool call and sub-agent is traced, with timings and tokens, in the **Trace** tab.
 - **Versions, GitHub and deploys.** Every run is a restorable version (a git commit). Push to a GitHub repo, or deploy to a public URL, from the **Ship** menu.
 

@@ -9,6 +9,7 @@ import { emit } from "./emit";
 import { ROUTER_PROMPT, fitToMode, parseRoute, routerInput, ruleRoute, type Intent, type RouteDecision } from "./router";
 import { errorDetail, stableId } from "./runtime";
 import type { RunScope } from "./scope";
+import { parseMentions } from "@/lib/mentions";
 
 /**
  * The first step of every turn: decide the route (router.ts) before any sandbox or big prompt.
@@ -56,6 +57,11 @@ export async function routeTurnStep(
     }
   }
   decision ??= { route: scope.mode, by: "default", reason: "Unclear, so it followed the selected mode" };
+  // Chat turns don't open the sandbox, so a message that points at files or skills is at least a question.
+  const mentions = parseMentions(input.text);
+  if (decision.route === "chat" && (mentions.files.length || mentions.skills.length)) {
+    decision = { route: "ask", by: "rule", reason: "It mentions files or skills, so it reads the project" };
+  }
 
   await Promise.all([
     endSpan(spanId, { status: "ok", startedAt, output: { ...decision, raw: raw?.slice(0, 600) }, attrs: { route: decision.route, by: decision.by } }),
